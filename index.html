@@ -49,7 +49,12 @@
   }
   body{ transition: background-color .2s ease, color .2s ease; }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
-  html,body{height:100%;}
+  button, .session-row-card, .hist-ex-row, .ex-row{
+    transition: background-color .15s ease, border-color .15s ease, transform .1s ease;
+  }
+  button:active{ transform: scale(0.97); }
+  .session-row-card:active, .hist-ex-row:active{ transform: scale(0.99); }
+  html,body{height:100%; touch-action:manipulation;}
   body{
     margin:0;
     background:var(--bg);
@@ -79,6 +84,11 @@
   .theme-toggle:active{ background:var(--accent-dim); color:var(--accent); }
 
   main{ flex:1; overflow-y:auto; padding: 16px 16px calc(96px + var(--safe-b)); }
+
+  @keyframes viewFadeIn{ from{ opacity:0; transform:translateY(6px); } to{ opacity:1; transform:translateY(0); } }
+  #view.fade-in{ animation: viewFadeIn .22s cubic-bezier(.22,.61,.36,1); }
+
+  @keyframes menuDropIn{ from{ opacity:0; transform:translateY(-4px) scaleY(.96); } to{ opacity:1; transform:translateY(0) scaleY(1); } }
   .section-title{
     font-size:12px; text-transform:uppercase; letter-spacing:0.08em; color:var(--dim-2);
     margin: 18px 4px 10px; font-weight:700; display:flex; align-items:center; gap:7px;
@@ -95,17 +105,27 @@
   .exercise-card.open .chevron{ transform: rotate(90deg); }
 
   .ex-head-right{ display:flex; align-items:center; gap:10px; flex-shrink:0; }
-  .link-btn{
+  .menu-btn{
     background:var(--surface-2); border:1px solid var(--border); border-radius:10px;
-    width:44px; height:44px; font-size:16px; line-height:1; color:var(--dim);
+    width:44px; height:44px; font-size:20px; line-height:1; color:var(--dim); font-weight:900;
   }
-  .link-btn.active{ background:var(--accent-dim); border-color:var(--accent); color:var(--accent); }
+  .menu-btn.active{ background:var(--accent-dim); border-color:var(--accent); color:var(--accent); }
+  .card-menu{
+    display:flex; flex-direction:column; gap:2px; margin-top:8px;
+    background:var(--surface-2); border:1px solid var(--border); border-radius:12px; padding:6px;
+    transform-origin:top; animation: menuDropIn .16s ease;
+  }
+  .card-menu button{
+    text-align:left; padding:10px 10px; border-radius:8px; border:none; background:transparent;
+    color:var(--chalk); font-size:13.5px; font-weight:600; transition: background-color .1s ease;
+  }
+  .card-menu button:active{ background:var(--bg); }
+  .card-menu button.danger{ color:var(--accent); }
   .superset-badge{
-    display:flex; align-items:center; justify-content:space-between; gap:8px;
+    display:flex; align-items:center; gap:8px;
     border:1px solid; border-radius:10px; padding:6px 10px; font-size:12px; font-weight:700;
     margin-top:8px; background:var(--surface-2);
   }
-  .superset-badge a{ font-weight:600; text-decoration:underline; opacity:0.85; }
   .link-hint{
     background:var(--accent-dim); border:1px solid var(--accent); color:var(--chalk);
     border-radius:12px; padding:10px 14px; font-size:13px; margin-bottom:14px;
@@ -117,6 +137,8 @@
     font-size:13px; color:var(--dim); margin:10px 0 8px;
   }
   .objectif-row .obj-label{ color:var(--dim-2); text-transform:uppercase; font-size:11px; letter-spacing:0.05em; margin-right:2px; }
+  .rest-row{ font-size:12px; color:var(--dim-2); margin-top:-4px; }
+  .rest-row .obj-input{ width:52px; }
   .obj-input{
     width:42px; text-align:center; background:var(--surface-2); border:1px solid var(--border);
     border-radius:8px; color:var(--chalk); font-size:13px; padding:5px 2px; font-weight:700;
@@ -177,7 +199,12 @@
 
   .ex-row{ display:flex; align-items:center; justify-content:space-between; padding:11px 4px; border-bottom:1px solid var(--border); gap:10px; }
   .ex-row:last-child{ border-bottom:none; }
-  .ex-row .name{ font-size:14.5px; }
+  .ex-row .name{ font-size:14.5px; flex:1; min-width:0; }
+  .ex-row-actions{ display:flex; align-items:center; gap:6px; flex-shrink:0; }
+  .icon-btn-sm{
+    width:32px; height:32px; border-radius:8px; border:1px solid var(--border);
+    background:var(--surface-2); color:var(--dim); font-size:14px;
+  }
   .add-circle{ width:40px; height:40px; border-radius:50%; border:1px solid var(--accent); color:var(--accent); background:transparent; font-size:18px; font-weight:700; flex-shrink:0; }
   .add-circle:active{ background:var(--accent-dim); }
 
@@ -185,6 +212,15 @@
   .new-ex-form input{ flex:1 1 100%; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:10px 12px; color:var(--chalk); font-size:14px; }
   .new-ex-form select{ flex:1; min-width:0; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; color:var(--chalk); font-size:13px; padding:0 6px; }
   .new-ex-form button{ flex:1 1 100%; background:var(--accent); border:none; border-radius:10px; color:#fff; padding:11px; font-weight:700; }
+
+  .edit-ex-form{ padding:11px 4px; border-bottom:1px solid var(--border); }
+  .edit-ex-form:last-child{ border-bottom:none; }
+  .edit-ex-form input{ width:100%; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:9px 11px; color:var(--chalk); font-size:14px; margin-bottom:8px; }
+  .edit-ex-form select{ background:var(--surface-2); border:1px solid var(--border); border-radius:10px; color:var(--chalk); font-size:13px; padding:8px 6px; margin-bottom:8px; margin-right:6px; }
+  .edit-ex-form .btn-row{ display:flex; gap:8px; }
+  .edit-ex-form .btn-row button{ flex:1; padding:10px; border-radius:10px; font-size:13px; font-weight:700; }
+  .edit-ex-form .create{ border:none; background:var(--accent); color:#fff; }
+  .edit-ex-form .cancel{ border:1px solid var(--border); background:transparent; color:var(--dim); }
 
   .session-row-card{
     background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
@@ -240,6 +276,30 @@
   .tab-btn{ flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; background:none; border:none; color:var(--dim-2); padding:6px 0; font-size:11px; font-weight:600; }
   .tab-btn.active{ color:var(--accent); }
   .tab-btn svg{ width:22px; height:22px; }
+
+  .guided-start-btn{
+    width:100%; padding:14px; border:none; border-radius:var(--radius);
+    background:var(--accent); color:#fff; font-size:15px; font-weight:800; letter-spacing:0.01em;
+    margin-bottom:14px;
+  }
+  .guided-wrap{ display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:65vh; text-align:center; padding:20px 0; }
+  .guided-log, .guided-rest, .guided-done{ width:100%; max-width:340px; display:flex; flex-direction:column; align-items:center; }
+  .guided-progress{ font-size:12px; color:var(--dim-2); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:8px; }
+  .guided-ex-name{ font-size:24px; font-weight:800; margin-bottom:4px; }
+  .guided-set-num{ font-size:15px; color:var(--dim); margin-bottom:16px; }
+  .guided-target-hint{ font-size:13px; color:var(--dim); background:var(--surface-2); border:1px solid var(--border); border-radius:999px; padding:7px 16px; margin-bottom:22px; }
+  .guided-log .stepper-row{ width:100%; margin-bottom:16px; }
+  .guided-log .validate-btn{ margin-top:6px; }
+  .guided-footer{ display:flex; gap:24px; margin-top:20px; font-size:13px; }
+  .guided-footer a{ color:var(--dim); }
+
+  .rest-label{ font-size:13px; text-transform:uppercase; letter-spacing:0.08em; color:var(--dim-2); margin-bottom:8px; }
+  .rest-countdown{ font-size:68px; font-weight:800; font-variant-numeric:tabular-nums; color:var(--accent); margin-bottom:12px; letter-spacing:-0.02em; }
+  .rest-next{ font-size:14px; color:var(--dim); margin-bottom:24px; }
+
+  .guided-done-icon{ font-size:48px; color:var(--success); margin-bottom:10px; }
+  .guided-done-title{ font-size:22px; font-weight:800; margin-bottom:6px; }
+  .guided-done-sub{ font-size:14px; color:var(--dim); margin-bottom:26px; }
 
   .pr-toast{
     position:fixed; top: calc(70px + var(--safe-t)); left:50%; transform:translateX(-50%);
@@ -432,14 +492,24 @@
   }
 
   var state = load();
-  var ui = { tab:"seance", activeDay:null, activeSession:null, newSessionForm:false, openExercise:null, historyDetail:null, draft:{}, exerciseQuery:"", linkFrom:null };
+  var ui = { tab:"seance", activeDay:null, activeSession:null, newSessionForm:false, openExercise:null, historyDetail:null, draft:{}, exerciseQuery:"", linkFrom:null, editingExercise:null, openMenu:null, guided:null };
+  var guidedTimer = null;
 
-  var DEFAULT_TARGET = {sets:3, reps:8, weight:20};
-  var DEFAULT_TARGET_CARDIO = {duration:20, speed:10, distance:3};
+  var DEFAULT_TARGET = {sets:3, reps:8, weight:20, rest:90};
+  var DEFAULT_TARGET_CARDIO = {duration:20, speed:10, distance:3, rest:90};
 
   function isCardio(ex){ return ex && ex.cat === "Cardio"; }
   function getExercise(id){ for(var i=0;i<state.exercises.length;i++) if(state.exercises[i].id===id) return state.exercises[i]; return null; }
-  function getDay(id){ for(var i=0;i<state.days.length;i++) if(state.days[i].id===id) return state.days[i]; return null; }
+  function getDay(id){
+    for(var i=0;i<state.days.length;i++) if(state.days[i].id===id) return state.days[i];
+    // Self-heal: a day slot can go missing after importing a malformed/older backup.
+    // Recreate it empty rather than let every caller crash on a null day.
+    var isValidId = DAYS.some(function(d){ return d.id===id; });
+    if(!isValidId) return null;
+    var fresh = {id:id, sessions:[]};
+    state.days.push(fresh);
+    return fresh;
+  }
   function findSession(sessionId){
     for(var i=0;i<state.days.length;i++){
       var day = state.days[i];
@@ -454,9 +524,9 @@
     var ex = getExercise(exId);
     var target;
     if(isCardio(ex)){
-      target = ex.lastTarget ? {duration:ex.lastTarget.duration, speed:ex.lastTarget.speed, distance:ex.lastTarget.distance} : {duration:DEFAULT_TARGET_CARDIO.duration, speed:DEFAULT_TARGET_CARDIO.speed, distance:DEFAULT_TARGET_CARDIO.distance};
+      target = ex.lastTarget ? {duration:ex.lastTarget.duration, speed:ex.lastTarget.speed, distance:ex.lastTarget.distance, rest:ex.lastTarget.rest||DEFAULT_TARGET_CARDIO.rest} : {duration:DEFAULT_TARGET_CARDIO.duration, speed:DEFAULT_TARGET_CARDIO.speed, distance:DEFAULT_TARGET_CARDIO.distance, rest:DEFAULT_TARGET_CARDIO.rest};
     } else {
-      target = ex.lastTarget ? {sets:ex.lastTarget.sets, reps:ex.lastTarget.reps, weight:ex.lastTarget.weight} : {sets:DEFAULT_TARGET.sets, reps:DEFAULT_TARGET.reps, weight:DEFAULT_TARGET.weight};
+      target = ex.lastTarget ? {sets:ex.lastTarget.sets, reps:ex.lastTarget.reps, weight:ex.lastTarget.weight, rest:ex.lastTarget.rest||DEFAULT_TARGET.rest} : {sets:DEFAULT_TARGET.sets, reps:DEFAULT_TARGET.reps, weight:DEFAULT_TARGET.weight, rest:DEFAULT_TARGET.rest};
     }
     return {exerciseId:exId, target:target, sets:[]};
   }
@@ -508,10 +578,13 @@
     return ui.draft[exId];
   }
   var lastAddSetTs = 0;
+  var lastAddSetKey = "";
   function addSet(sessionId, exId){
     var now = Date.now();
-    if(now - lastAddSetTs < 500) return;
+    var key = sessionId+"|"+exId;
+    if(key===lastAddSetKey && now - lastAddSetTs < 300) return;
     lastAddSetTs = now;
+    lastAddSetKey = key;
     var loc = findSession(sessionId);
     if(!loc) return;
     var session = loc.session;
@@ -553,13 +626,15 @@
     if(!e) return;
     var ex = getExercise(exId);
     if(isCardio(ex)){
-      if(!e.target) e.target = {duration:DEFAULT_TARGET_CARDIO.duration, speed:DEFAULT_TARGET_CARDIO.speed, distance:DEFAULT_TARGET_CARDIO.distance};
+      if(!e.target) e.target = {duration:DEFAULT_TARGET_CARDIO.duration, speed:DEFAULT_TARGET_CARDIO.speed, distance:DEFAULT_TARGET_CARDIO.distance, rest:DEFAULT_TARGET_CARDIO.rest};
+      if(e.target.rest===undefined) e.target.rest = DEFAULT_TARGET_CARDIO.rest;
       e.target[prop] = value;
-      ex.lastTarget = {duration:e.target.duration, speed:e.target.speed, distance:e.target.distance};
+      ex.lastTarget = {duration:e.target.duration, speed:e.target.speed, distance:e.target.distance, rest:e.target.rest};
     } else {
-      if(!e.target) e.target = {sets:DEFAULT_TARGET.sets, reps:DEFAULT_TARGET.reps, weight:DEFAULT_TARGET.weight};
+      if(!e.target) e.target = {sets:DEFAULT_TARGET.sets, reps:DEFAULT_TARGET.reps, weight:DEFAULT_TARGET.weight, rest:DEFAULT_TARGET.rest};
+      if(e.target.rest===undefined) e.target.rest = DEFAULT_TARGET.rest;
       e.target[prop] = value;
-      ex.lastTarget = {sets:e.target.sets, reps:e.target.reps, weight:e.target.weight};
+      ex.lastTarget = {sets:e.target.sets, reps:e.target.reps, weight:e.target.weight, rest:e.target.rest};
     }
     save(); render();
   }
@@ -592,6 +667,107 @@
     setTimeout(function(){ t.classList.remove("show"); }, isError ? 3000 : 1400);
   }
   function showPR(){ showToast("Nouveau record"); }
+
+  function formatTime(sec){
+    sec = Math.max(0, Math.round(sec));
+    var m = Math.floor(sec/60), s = sec%60;
+    return m+":"+(s<10?"0":"")+s;
+  }
+  function playBeep(){
+    try{
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      if(!Ctx) return;
+      var ctx = new Ctx();
+      var o = ctx.createOscillator();
+      var g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.frequency.value = 880;
+      g.gain.setValueAtTime(0.001, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.3, ctx.currentTime+0.01);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+0.5);
+      o.start(); o.stop(ctx.currentTime+0.55);
+    }catch(err){}
+  }
+  function startGuided(sessionId){
+    var loc = findSession(sessionId);
+    if(!loc || loc.session.entries.length===0) return;
+    clearInterval(guidedTimer); guidedTimer = null;
+    ui.guided = {sessionId:sessionId, entryIndex:0, setNumber:1, phase:"log", restEndsAt:null, startedAt:Date.now(), setsLogged:0};
+    ui.tab = "seance"; ui.activeSession = sessionId;
+    render();
+  }
+  function exitGuided(){
+    clearInterval(guidedTimer); guidedTimer = null;
+    ui.guided = null;
+    render();
+  }
+  function guidedGoRest(target){
+    var restSec = (target && target.rest) || 90;
+    ui.guided.phase = "rest";
+    ui.guided.restEndsAt = Date.now() + restSec*1000;
+    render();
+    clearInterval(guidedTimer);
+    guidedTimer = setInterval(tickGuidedRest, 250);
+  }
+  function tickGuidedRest(){
+    if(!ui.guided || ui.guided.phase!=="rest"){ clearInterval(guidedTimer); guidedTimer=null; return; }
+    var remaining = (ui.guided.restEndsAt - Date.now())/1000;
+    var el = document.getElementById("restCountdown");
+    if(el) el.textContent = formatTime(remaining);
+    if(remaining<=0){
+      clearInterval(guidedTimer); guidedTimer=null;
+      playBeep();
+      ui.guided.phase = "log";
+      render();
+    }
+  }
+  function guidedValidateSet(){
+    if(!ui.guided) return;
+    var loc = findSession(ui.guided.sessionId);
+    if(!loc){ ui.guided=null; render(); return; }
+    var entry = loc.session.entries[ui.guided.entryIndex];
+    if(!entry){ ui.guided.phase="done"; render(); return; }
+    var ex = getExercise(entry.exerciseId);
+    if(!ex){ ui.guided.entryIndex++; ui.guided.setNumber=1; render(); return; }
+    addSet(ui.guided.sessionId, entry.exerciseId);
+    ui.guided.setsLogged++;
+    var target = entry.target || {};
+    var totalSets = isCardio(ex) ? 1 : (target.sets || 1);
+    var isLastSetOfExercise = ui.guided.setNumber >= totalSets;
+    var isLastExercise = ui.guided.entryIndex >= loc.session.entries.length-1;
+    if(isLastSetOfExercise && isLastExercise){
+      clearInterval(guidedTimer); guidedTimer=null;
+      ui.guided.phase = "done";
+      render();
+      return;
+    }
+    if(isLastSetOfExercise){
+      ui.guided.entryIndex++;
+      ui.guided.setNumber = 1;
+    } else {
+      ui.guided.setNumber++;
+    }
+    guidedGoRest(target);
+  }
+  function guidedSkipRest(){
+    if(!ui.guided || ui.guided.phase!=="rest") return;
+    clearInterval(guidedTimer); guidedTimer=null;
+    ui.guided.phase = "log";
+    render();
+  }
+  function guidedSkipExercise(){
+    if(!ui.guided) return;
+    clearInterval(guidedTimer); guidedTimer=null;
+    var loc = findSession(ui.guided.sessionId);
+    ui.guided.entryIndex++;
+    ui.guided.setNumber = 1;
+    if(!loc || ui.guided.entryIndex >= loc.session.entries.length){
+      ui.guided.phase = "done";
+    } else {
+      ui.guided.phase = "log";
+    }
+    render();
+  }
 
   function stepBtn(delta,target,prop,label,ariaLabel){ return '<button data-action="step" data-target="'+target+'" data-prop="'+prop+'" data-delta="'+delta+'" aria-label="'+esc(ariaLabel||label)+'">'+label+'</button>'; }
   function catDot(cat){ return '<span class="cat-dot" style="background:var('+CAT_VAR[cat]+')"></span>'; }
@@ -631,6 +807,41 @@
     e.supersetId = null;
     save(); render();
   }
+  function removeExerciseFromSession(sessionId, exId){
+    var loc = findSession(sessionId);
+    if(!loc) return;
+    if(!window.confirm("Retirer cet exercice de cette séance ?")) return;
+    loc.session.entries = loc.session.entries.filter(function(e){ return e.exerciseId!==exId; });
+    save(); render();
+  }
+  function moveExercise(sessionId, exId, dir){
+    var loc = findSession(sessionId);
+    if(!loc) return;
+    var arr = loc.session.entries;
+    var idx = -1;
+    for(var i=0;i<arr.length;i++){ if(arr[i].exerciseId===exId){ idx=i; break; } }
+    if(idx<0) return;
+    var newIdx = idx + dir;
+    if(newIdx<0 || newIdx>=arr.length) return;
+    var tmp = arr[idx]; arr[idx] = arr[newIdx]; arr[newIdx] = tmp;
+    save(); render();
+  }
+  function updateExercise(exId, name, cat, muscle){
+    var ex = getExercise(exId);
+    if(!ex) return;
+    ex.name = name; ex.cat = cat; ex.muscle = muscle;
+    save(); render();
+  }
+  function deleteExerciseFromLibrary(exId){
+    if(!window.confirm("Supprimer cet exercice de ta bibliothèque ? Il sera aussi retiré de toutes tes séances en cours.")) return;
+    state.exercises = state.exercises.filter(function(ex){ return ex.id!==exId; });
+    state.days.forEach(function(day){
+      day.sessions.forEach(function(s){
+        s.entries = s.entries.filter(function(e){ return e.exerciseId!==exId; });
+      });
+    });
+    save(); render();
+  }
 
   function renderExerciseCard(session, exId){
     var ex = getExercise(exId);
@@ -661,15 +872,27 @@
 
     var html = '<div class="card exercise-card'+(open?' open':'')+(metGoal?' goal-met':'')+'">';
     html += '<div class="ex-head" data-action="toggle" data-ex="'+exId+'">';
-    var linking = ui.linkFrom && ui.linkFrom.session===session.id && ui.linkFrom.ex===exId;
+    var menuOpen = ui.openMenu === exId;
     html += '<span class="ex-title">'+esc(ex.name)+'</span>'+
       '<span class="ex-head-right">'+
-      '<button class="link-btn'+(linking?' active':'')+'" data-action="linktoggle" data-session="'+session.id+'" data-ex="'+exId+'" aria-label="Lier en superset">🔗</button>'+
+      '<button class="menu-btn'+(menuOpen?' active':'')+'" data-action="togglemenu" data-ex="'+exId+'" aria-label="Options de l’exercice">⋮</button>'+
       '<span class="chevron" aria-hidden="true">▶</span></span></div>';
+    if(menuOpen){
+      var linking = ui.linkFrom && ui.linkFrom.session===session.id && ui.linkFrom.ex===exId;
+      var linkAction, linkLabel;
+      if(e.supersetId){ linkAction="unlink"; linkLabel="✕ Délier le superset"; }
+      else if(linking){ linkAction="linktoggle"; linkLabel="✕ Annuler la liaison"; }
+      else { linkAction="linktoggle"; linkLabel="🔗 Lier en superset"; }
+      html += '<div class="card-menu">'+
+        '<button data-action="moveex" data-session="'+session.id+'" data-ex="'+exId+'" data-dir="-1">↑ Monter</button>'+
+        '<button data-action="moveex" data-session="'+session.id+'" data-ex="'+exId+'" data-dir="1">↓ Descendre</button>'+
+        '<button data-action="'+linkAction+'" data-session="'+session.id+'" data-ex="'+exId+'">'+linkLabel+'</button>'+
+        '<button class="danger" data-action="removeex" data-session="'+session.id+'" data-ex="'+exId+'">🗑 Retirer de la séance</button>'+
+        '</div>';
+    }
     if(e.supersetId){
       var sc = supersetColor(e.supersetId);
-      html += '<div class="superset-badge" style="border-color:'+sc+';color:'+sc+'"><span>⚡ Superset</span>'+
-        '<a data-action="unlink" data-session="'+session.id+'" data-ex="'+exId+'">Délier</a></div>';
+      html += '<div class="superset-badge" style="border-color:'+sc+';color:'+sc+'"><span>⚡ Superset</span></div>';
     }
 
     if(cardio){
@@ -683,6 +906,8 @@
         '<input class="obj-input" type="number" inputmode="numeric" min="0" data-role="target-reps" data-session="'+session.id+'" data-ex="'+exId+'" value="'+target.reps+'" aria-label="Objectif de nombre de répétitions"> reps ×'+
         '<input class="obj-input" type="number" inputmode="decimal" min="0" data-role="target-weight" data-session="'+session.id+'" data-ex="'+exId+'" value="'+target.weight+'" aria-label="Objectif de poids en kg"> kg</div>';
     }
+    html += '<div class="objectif-row rest-row"><span class="obj-label">Repos</span>'+
+      '<input class="obj-input" type="number" inputmode="numeric" min="0" step="5" data-role="target-rest" data-session="'+session.id+'" data-ex="'+exId+'" value="'+(target.rest||90)+'" aria-label="Temps de repos en secondes"> sec entre les séries</div>';
 
     html += '<div class="result-row'+(metGoal?' met':'')+'">';
     html += sets.length ? chips : '<span class="result-empty">Aucune série validée</span>';
@@ -770,17 +995,96 @@
     html += '<div class="sess-header"><div class="sess-title">'+esc(session.name||"Séance")+'</div></div>';
     html += '<input class="name-input" type="text" placeholder="Nom de la séance (ex. Push, Jambes…)" value="'+esc(session.name||'')+'" data-role="sessionname" data-session="'+session.id+'">';
     if(ui.linkFrom && ui.linkFrom.session===session.id){
-      html += '<div class="link-hint">Touche 🔗 sur l’exercice à lier en superset — <a data-action="cancellink">annuler</a></div>';
+      html += '<div class="link-hint">Ouvre le menu ⋮ de l’exercice à lier, puis « Lier en superset » — <a data-action="cancellink">annuler</a></div>';
     }
     if(session.entries.length===0){
       html += '<div class="empty">Aucun exercice pour l’instant.<br>Ajoute un exercice depuis l’onglet Exercices.</div>';
     } else {
+      html += '<button class="guided-start-btn" data-action="startguided" data-session="'+session.id+'">▶ Lancer la séance</button>';
       session.entries.forEach(function(e){ html += renderExerciseCard(session, e.exerciseId); });
     }
     html += '<button class="cta-btn" data-action="goto-exercices">+ Ajouter un exercice</button>';
     var anySets = session.entries.some(function(e){ return e.sets.length>0; });
     if(anySets) html += '<button class="reset-btn" data-action="resetsession" data-session="'+session.id+'">Réinitialiser les séries de cette séance</button>';
     html += '<a class="danger-link" data-action="deletesession" data-session="'+session.id+'">Supprimer cette séance</a>';
+    return html;
+  }
+
+  function renderGuided(){
+    var loc = findSession(ui.guided.sessionId);
+    if(!loc){ ui.guided=null; return renderSeance(); }
+    var session = loc.session;
+    var entries = session.entries;
+
+    if(ui.guided.phase==="done" || ui.guided.entryIndex >= entries.length){
+      var mins = Math.max(1, Math.round((Date.now()-ui.guided.startedAt)/60000));
+      return '<div class="guided-wrap"><div class="guided-done">'+
+        '<div class="guided-done-icon">✓</div>'+
+        '<div class="guided-done-title">Séance terminée</div>'+
+        '<div class="guided-done-sub">'+ui.guided.setsLogged+' série'+(ui.guided.setsLogged>1?'s':'')+' validée'+(ui.guided.setsLogged>1?'s':'')+' en '+mins+' min</div>'+
+        '<button class="validate-btn" data-action="guidedexit">Terminer</button>'+
+        '</div></div>';
+    }
+
+    var entry = entries[ui.guided.entryIndex];
+    var ex = getExercise(entry.exerciseId);
+    if(!ex){ ui.guided.entryIndex++; return renderGuided(); }
+    var target = entry.target || {};
+    var cardio = isCardio(ex);
+    var totalSets = cardio ? 1 : (target.sets||1);
+
+    if(ui.guided.phase==="rest"){
+      var remaining = (ui.guided.restEndsAt - Date.now())/1000;
+      var nextLabel;
+      if(ui.guided.setNumber<=totalSets){
+        nextLabel = esc(ex.name)+' — Série '+ui.guided.setNumber+'/'+totalSets;
+      } else {
+        var nextEntry = entries[ui.guided.entryIndex+1];
+        var nextEx = nextEntry ? getExercise(nextEntry.exerciseId) : null;
+        nextLabel = nextEx ? esc(nextEx.name) : 'Fin de séance';
+      }
+      return '<div class="guided-wrap"><div class="guided-rest">'+
+        '<div class="rest-label">Repos</div>'+
+        '<div class="rest-countdown" id="restCountdown">'+formatTime(remaining)+'</div>'+
+        '<div class="rest-next">Ensuite : '+nextLabel+'</div>'+
+        '<button class="cta-btn" data-action="guidedskiprest">Passer le repos</button>'+
+        '<a class="back-link" data-action="guidedexit">Quitter le mode guidé</a>'+
+        '</div></div>';
+    }
+
+    var d = draftFor(entry.exerciseId);
+    var html = '<div class="guided-wrap"><div class="guided-log">';
+    html += '<div class="guided-progress">Exercice '+(ui.guided.entryIndex+1)+'/'+entries.length+'</div>';
+    html += '<div class="guided-ex-name">'+esc(ex.name)+'</div>';
+    html += '<div class="guided-set-num">Série '+ui.guided.setNumber+'/'+totalSets+'</div>';
+    if(cardio){
+      html += '<div class="guided-target-hint">Objectif : '+target.duration+' min × '+target.speed+' km/h × '+target.distance+' km</div>';
+      html += '<div class="stepper-row"><span class="stepper-label">Durée (min)</span><div class="stepper">'+
+        stepBtn(-5,entry.exerciseId,"duration","−","Diminuer la durée")+
+        '<input class="num" type="number" inputmode="numeric" data-action="setval" data-target="'+entry.exerciseId+'" data-prop="duration" value="'+d.duration+'">'+
+        stepBtn(5,entry.exerciseId,"duration","+","Augmenter la durée")+'</div></div>';
+      html += '<div class="stepper-row"><span class="stepper-label">Vitesse (km/h)</span><div class="stepper">'+
+        stepBtn(-0.5,entry.exerciseId,"speed","−","Diminuer la vitesse")+
+        '<input class="num" type="number" inputmode="decimal" data-action="setval" data-target="'+entry.exerciseId+'" data-prop="speed" value="'+d.speed+'">'+
+        stepBtn(0.5,entry.exerciseId,"speed","+","Augmenter la vitesse")+'</div></div>';
+      html += '<div class="stepper-row"><span class="stepper-label">Distance (km)</span><div class="stepper">'+
+        stepBtn(-0.5,entry.exerciseId,"distance","−","Diminuer la distance")+
+        '<input class="num" type="number" inputmode="decimal" data-action="setval" data-target="'+entry.exerciseId+'" data-prop="distance" value="'+d.distance+'">'+
+        stepBtn(0.5,entry.exerciseId,"distance","+","Augmenter la distance")+'</div></div>';
+    } else {
+      html += '<div class="guided-target-hint">Objectif : '+target.sets+' × '+target.reps+' × '+target.weight+' kg</div>';
+      html += '<div class="stepper-row"><span class="stepper-label">Poids (kg)</span><div class="stepper">'+
+        stepBtn(-2.5,entry.exerciseId,"weight","−","Diminuer le poids")+
+        '<input class="num" type="number" inputmode="decimal" data-action="setval" data-target="'+entry.exerciseId+'" data-prop="weight" value="'+d.weight+'">'+
+        stepBtn(2.5,entry.exerciseId,"weight","+","Augmenter le poids")+'</div></div>';
+      html += '<div class="stepper-row"><span class="stepper-label">Répétitions</span><div class="stepper">'+
+        stepBtn(-1,entry.exerciseId,"reps","−","Diminuer les répétitions")+
+        '<input class="num" type="number" inputmode="numeric" data-action="setval" data-target="'+entry.exerciseId+'" data-prop="reps" value="'+d.reps+'">'+
+        stepBtn(1,entry.exerciseId,"reps","+","Augmenter les répétitions")+'</div></div>';
+    }
+    html += '<button class="validate-btn" data-action="guidedvalidate">Valider la série</button>';
+    html += '<div class="guided-footer"><a data-action="guidedskipexercise">Passer cet exercice ›</a><a data-action="guidedexit">Quitter</a></div>';
+    html += '</div></div>';
     return html;
   }
 
@@ -812,8 +1116,21 @@
     order.forEach(function(cat){
       html += '<div class="section-title">'+catDot(cat)+cat+'</div><div class="card">';
       byCat[cat].forEach(function(ex){
-        html += '<div class="ex-row"><span class="name">'+esc(ex.name)+'</span>'+
-          '<button class="add-circle" data-action="addtoday" data-ex="'+ex.id+'" aria-label="Ajouter '+esc(ex.name)+' à la séance">+</button></div>';
+        if(ui.editingExercise===ex.id){
+          html += '<div class="edit-ex-form">'+
+            '<input type="text" id="editExName" value="'+esc(ex.name)+'">'+
+            '<select id="editExCat">'+CAT_ORDER.map(function(c){return '<option'+(c===ex.cat?' selected':'')+'>'+c+'</option>';}).join('')+'</select>'+
+            '<select id="editExMuscle">'+MUSCLE_ORDER.map(function(m){return '<option'+(m===ex.muscle?' selected':'')+'>'+m+'</option>';}).join('')+'</select>'+
+            '<div class="btn-row"><button class="cancel" data-action="canceleditex">Annuler</button><button class="create" data-action="saveeditex" data-ex="'+ex.id+'">Enregistrer</button></div>'+
+            '</div>';
+        } else {
+          html += '<div class="ex-row"><span class="name">'+esc(ex.name)+'</span>'+
+            '<span class="ex-row-actions">'+
+            '<button class="icon-btn-sm" data-action="editex" data-ex="'+ex.id+'" aria-label="Modifier '+esc(ex.name)+'">✎</button>'+
+            '<button class="icon-btn-sm" data-action="deleteex" data-ex="'+ex.id+'" aria-label="Supprimer '+esc(ex.name)+'">🗑</button>'+
+            '<button class="add-circle" data-action="addtoday" data-ex="'+ex.id+'" aria-label="Ajouter '+esc(ex.name)+' à la séance">+</button>'+
+            '</span></div>';
+        }
       });
       html += '</div>';
     });
@@ -937,10 +1254,14 @@
     var main = document.querySelector("main");
     var scrollPos = main ? main.scrollTop : 0;
     var view = document.getElementById("view");
-    if(ui.tab==="seance") view.innerHTML = renderSeance();
+    if(ui.guided) view.innerHTML = renderGuided();
+    else if(ui.tab==="seance") view.innerHTML = renderSeance();
     else if(ui.tab==="exercices") view.innerHTML = renderExercices();
     else view.innerHTML = renderHistorique();
     if(main) main.scrollTop = scrollPos;
+    view.classList.remove("fade-in");
+    void view.offsetWidth;
+    view.classList.add("fade-in");
   }
 
   document.querySelectorAll(".tab-btn").forEach(function(b){
@@ -948,6 +1269,8 @@
       ui.tab = b.dataset.tab;
       if(ui.tab==="historique") ui.historyDetail = null;
       ui.linkFrom = null;
+      ui.openMenu = null;
+      if(ui.guided){ clearInterval(guidedTimer); guidedTimer=null; ui.guided=null; }
       render();
     });
   });
@@ -965,9 +1288,9 @@
     } else if(action==="goto-exercices"){
       ui.tab="exercices"; render();
     } else if(action==="openday"){
-      ui.activeDay = t.dataset.id; ui.activeSession = null; ui.newSessionForm = false; ui.linkFrom = null; render();
+      ui.activeDay = t.dataset.id; ui.activeSession = null; ui.newSessionForm = false; ui.linkFrom = null; ui.openMenu = null; render();
     } else if(action==="closeday"){
-      ui.activeDay = null; ui.linkFrom = null; render();
+      ui.activeDay = null; ui.linkFrom = null; ui.openMenu = null; render();
     } else if(action==="newsession"){
       ui.newSessionForm = true; render();
     } else if(action==="cancelnewsession"){
@@ -978,9 +1301,9 @@
       ui.newSessionForm = false; ui.activeSession = s.id;
       render();
     } else if(action==="opensession"){
-      ui.activeSession = t.dataset.id; ui.openExercise = null; ui.linkFrom = null; render();
+      ui.activeSession = t.dataset.id; ui.openExercise = null; ui.linkFrom = null; ui.openMenu = null; render();
     } else if(action==="closesession"){
-      ui.activeSession = null; ui.linkFrom = null; render();
+      ui.activeSession = null; ui.linkFrom = null; ui.openMenu = null; render();
     } else if(action==="resetsession"){
       resetSession(t.dataset.session);
     } else if(action==="deletesession"){
@@ -995,12 +1318,46 @@
       addSet(t.dataset.session, t.dataset.ex);
     } else if(action==="delset"){
       deleteSet(t.dataset.session, t.dataset.ex, t.dataset.set);
+    } else if(action==="startguided"){
+      startGuided(t.dataset.session);
+    } else if(action==="guidedvalidate"){
+      guidedValidateSet();
+    } else if(action==="guidedskiprest"){
+      guidedSkipRest();
+    } else if(action==="guidedskipexercise"){
+      guidedSkipExercise();
+    } else if(action==="guidedexit"){
+      exitGuided();
+    } else if(action==="togglemenu"){
+      ui.openMenu = (ui.openMenu===t.dataset.ex) ? null : t.dataset.ex;
+      render();
     } else if(action==="linktoggle"){
+      ui.openMenu = null;
       toggleLink(t.dataset.session, t.dataset.ex);
     } else if(action==="unlink"){
+      ui.openMenu = null;
       unlinkSuperset(t.dataset.session, t.dataset.ex);
     } else if(action==="cancellink"){
       ui.linkFrom = null; render();
+    } else if(action==="moveex"){
+      ui.openMenu = null;
+      moveExercise(t.dataset.session, t.dataset.ex, parseInt(t.dataset.dir,10));
+    } else if(action==="removeex"){
+      ui.openMenu = null;
+      removeExerciseFromSession(t.dataset.session, t.dataset.ex);
+    } else if(action==="editex"){
+      ui.editingExercise = t.dataset.ex; render();
+    } else if(action==="canceleditex"){
+      ui.editingExercise = null; render();
+    } else if(action==="saveeditex"){
+      var newName = document.getElementById("editExName").value.trim();
+      if(!newName){ window.alert("Le nom ne peut pas être vide."); return; }
+      var newCat = document.getElementById("editExCat").value;
+      var newMuscle = document.getElementById("editExMuscle").value;
+      ui.editingExercise = null;
+      updateExercise(t.dataset.ex, newName, newCat, newMuscle);
+    } else if(action==="deleteex"){
+      deleteExerciseFromLibrary(t.dataset.ex);
     } else if(action==="createex"){
       var nameInput = document.getElementById("newExName");
       var catInput = document.getElementById("newExCat");
