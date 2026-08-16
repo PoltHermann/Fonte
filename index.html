@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#141416">
@@ -55,6 +55,7 @@
   button:active{ transform: scale(0.97); }
   .session-row-card:active, .hist-ex-row:active{ transform: scale(0.99); }
   html,body{height:100%; touch-action:manipulation;}
+  *{ touch-action:manipulation; }
   body{
     margin:0;
     background:var(--bg);
@@ -137,7 +138,15 @@
     font-size:13px; color:var(--dim); margin:10px 0 8px;
   }
   .objectif-row .obj-label{ color:var(--dim-2); text-transform:uppercase; font-size:11px; letter-spacing:0.05em; margin-right:2px; }
-  .rest-input{ width:40px; color:var(--dim); font-size:12px; }
+  .rest-line{
+    display:flex; align-items:center; gap:4px; font-size:12px; color:var(--dim-2);
+    margin:2px 0 10px;
+  }
+  .rest-input-plain{
+    background:transparent; border:none; border-bottom:1px dashed var(--border);
+    color:var(--dim); font-size:12px; font-weight:700; width:28px; text-align:center; padding:0 1px;
+  }
+  .rest-input-plain:focus{ outline:none; border-bottom-color:var(--accent); color:var(--chalk); }
   .obj-input{
     width:42px; text-align:center; background:var(--surface-2); border:1px solid var(--border);
     border-radius:8px; color:var(--chalk); font-size:13px; padding:5px 2px; font-weight:700;
@@ -253,6 +262,12 @@
     width:100%; background:var(--surface-2); border:1px solid var(--border); border-radius:10px;
     padding:10px 12px; color:var(--chalk); font-size:14px; margin-bottom:14px;
   }
+  .session-title-input{
+    background:transparent; border:none; border-radius:0;
+    padding:4px 4px 12px; font-size:22px; font-weight:800; margin-bottom:6px;
+  }
+  .session-title-input:focus{ outline:none; border-bottom:1px solid var(--border); }
+  .session-title-input::placeholder{ font-weight:700; color:var(--dim-2); }
 
   .muscle-row{ margin-bottom:12px; }
   .muscle-row:last-child{ margin-bottom:0; }
@@ -290,16 +305,37 @@
     background:var(--accent); color:#fff; font-size:15px; font-weight:800; letter-spacing:0.01em;
     margin-bottom:14px;
   }
-  .guided-wrap{ display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:65vh; text-align:center; padding:20px 0; }
+  .guided-wrap{
+    display:flex; flex-direction:column; align-items:center; justify-content:space-between;
+    min-height:calc(100vh - 230px); text-align:center; padding:20px 0 10px;
+  }
   .guided-log, .guided-rest, .guided-done{ width:100%; max-width:340px; display:flex; flex-direction:column; align-items:center; }
-  .guided-progress{ font-size:12px; color:var(--dim-2); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:8px; }
+  .guided-progress{ font-size:12px; color:var(--dim-2); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:10px; }
+  .guided-progress-wrap{ width:100%; margin-bottom:16px; }
+  .guided-progress-bar{ width:100%; height:6px; background:var(--surface-2); border-radius:999px; overflow:hidden; margin-bottom:6px; }
+  .guided-progress-fill{ height:100%; background:var(--accent); border-radius:999px; transition:width .3s ease; }
+  .guided-progress-label{ font-size:11px; color:var(--dim-2); text-align:center; }
+  .rest-next-target{ color:var(--dim-2); }
+  .guided-summary-list{ width:100%; text-align:left; background:var(--surface-2); border:1px solid var(--border); border-radius:14px; padding:6px 14px; margin-bottom:22px; }
+  .guided-summary-row{
+    display:flex; justify-content:space-between; gap:10px; padding:10px 0; border-bottom:1px solid var(--border);
+    font-size:13.5px;
+  }
+  .guided-summary-row:last-child{ border-bottom:none; }
+  .gsr-name{ font-weight:700; }
+  .gsr-detail{ color:var(--dim); text-align:right; }
+  .howto-area{ width:100%; text-align:left; margin-top:0; margin-bottom:16px; min-height:36px; }
   .guided-ex-name{ font-size:24px; font-weight:800; margin-bottom:4px; }
   .guided-set-num{ font-size:15px; color:var(--dim); margin-bottom:16px; }
+  .set-stopwatch{ font-variant-numeric:tabular-nums; font-weight:800; color:var(--chalk); }
   .guided-target-hint{ font-size:13px; color:var(--dim); background:var(--surface-2); border:1px solid var(--border); border-radius:999px; padding:7px 16px; margin-bottom:22px; }
   .guided-log .stepper-row{ width:100%; margin-bottom:16px; }
   .guided-log .validate-btn{ margin-top:6px; }
-  .guided-footer{ display:flex; gap:28px; margin-top:44px; font-size:12px; }
+  .guided-footer{ display:flex; gap:28px; margin-top:20px; font-size:12px; }
   .guided-footer a{ color:var(--dim-2); padding:8px; }
+  .guided-quit-btn{
+    display:block; color:var(--dim-2); font-size:13px; padding:16px; margin-top:20px;
+  }
 
   @keyframes restFlash{
     0%{ box-shadow:0 0 0 0 var(--success-dim); }
@@ -311,7 +347,7 @@
   .guided-log.rest-flash{ animation: restFlash .7s ease; border-radius:20px; }
 
   .rest-label{ font-size:13px; text-transform:uppercase; letter-spacing:0.08em; color:var(--dim-2); margin-bottom:8px; }
-  .rest-countdown{ font-size:68px; font-weight:800; font-variant-numeric:tabular-nums; color:var(--accent); margin-bottom:12px; letter-spacing:-0.02em; }
+  .rest-countdown{ font-size:96px; font-weight:800; font-variant-numeric:tabular-nums; color:var(--accent); margin-bottom:12px; letter-spacing:-0.03em; }
   .rest-next{ font-size:14px; color:var(--dim); margin-bottom:24px; }
 
   .guided-done-icon{ font-size:48px; color:var(--success); margin-bottom:10px; }
@@ -333,9 +369,6 @@
   <header class="topbar">
     <div class="brand">Fonte<span>.</span></div>
     <div class="topbar-actions">
-      <button class="theme-toggle" id="icloudBackupBtn" aria-label="Sauvegarder dans iCloud">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a4 4 0 0 1-.6-7.96A5.5 5.5 0 0 1 17.4 8.5 4.5 4.5 0 0 1 17 18H7Z"/><path d="M12 12v7M9 16l3-3 3 3"/></svg>
-      </button>
       <button class="theme-toggle" id="themeToggle" aria-label="Changer de thème">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><path d="M12 2v2M12 20v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M2 12h2M20 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></svg>
       </button>
@@ -676,6 +709,27 @@
     e.note = note;
     save();
   }
+  function setHowTo(exId, text){
+    var ex = getExercise(exId);
+    if(!ex) return;
+    ex.howTo = text;
+    save();
+  }
+  function mergeHowToImport(data){
+    var map = {};
+    if(Array.isArray(data)){
+      data.forEach(function(item){ if(item && item.name) map[String(item.name).trim().toLowerCase()] = item.howTo||""; });
+    } else if(data && typeof data==="object"){
+      Object.keys(data).forEach(function(k){ map[k.trim().toLowerCase()] = data[k]; });
+    }
+    var count = 0;
+    state.exercises.forEach(function(ex){
+      var key = ex.name.trim().toLowerCase();
+      if(map[key]!==undefined){ ex.howTo = map[key]; count++; }
+    });
+    save(); render();
+    return count;
+  }
   function deleteSession(sessionId){
     var loc = findSession(sessionId);
     if(!loc) return;
@@ -727,15 +781,21 @@
     var loc = findSession(sessionId);
     if(!loc || loc.session.entries.length===0) return;
     clearInterval(guidedTimer); guidedTimer = null;
-    try{
-      var Ctx = window.AudioContext || window.webkitAudioContext;
-      if(Ctx && !guidedAudioCtx) guidedAudioCtx = new Ctx();
-      if(guidedAudioCtx && guidedAudioCtx.state === "suspended") guidedAudioCtx.resume();
-    }catch(err){}
+    unlockGuidedAudio();
     requestWakeLock();
-    ui.guided = {sessionId:sessionId, entryIndex:0, setNumber:1, phase:"log", restEndsAt:null, startedAt:Date.now(), setsLogged:0};
+    ui.guided = {sessionId:sessionId, entryIndex:0, setNumber:1, phase:"log", restEndsAt:null, startedAt:Date.now(), setsLogged:0, setStartedAt:Date.now()};
     ui.tab = "seance"; ui.activeSession = sessionId;
     render();
+    startSetStopwatch();
+    playBeep();
+  }
+  function unlockGuidedAudio(){
+    try{
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      if(!Ctx) return;
+      if(!guidedAudioCtx) guidedAudioCtx = new Ctx();
+      if(guidedAudioCtx.state === "suspended") guidedAudioCtx.resume();
+    }catch(err){}
   }
   var wakeLock = null;
   function requestWakeLock(){
@@ -752,13 +812,25 @@
     if(document.visibilityState === 'visible' && ui.guided && !wakeLock) requestWakeLock();
   });
 
+  var setStopwatchTimer = null;
+  function startSetStopwatch(){
+    clearInterval(setStopwatchTimer);
+    setStopwatchTimer = setInterval(tickSetStopwatch, 250);
+  }
+  function tickSetStopwatch(){
+    if(!ui.guided || ui.guided.phase!=="log"){ clearInterval(setStopwatchTimer); setStopwatchTimer=null; return; }
+    var el = document.getElementById("setStopwatch");
+    if(el) el.textContent = formatTime((Date.now()-ui.guided.setStartedAt)/1000);
+  }
   function exitGuided(){
     clearInterval(guidedTimer); guidedTimer = null;
+    clearInterval(setStopwatchTimer); setStopwatchTimer = null;
     releaseWakeLock();
     ui.guided = null;
     render();
   }
   function guidedGoRest(target){
+    clearInterval(setStopwatchTimer); setStopwatchTimer = null;
     var restSec = (target && target.rest) || 90;
     ui.guided.phase = "rest";
     ui.guided.restEndsAt = Date.now() + restSec*1000;
@@ -773,10 +845,13 @@
     if(el) el.textContent = formatTime(remaining);
     if(remaining<=0){
       clearInterval(guidedTimer); guidedTimer=null;
+      unlockGuidedAudio();
       playBeep();
       ui.guided.phase = "log";
+      ui.guided.setStartedAt = Date.now();
       ui.guided.justFinishedRest = true;
       render();
+      startSetStopwatch();
     }
   }
   function guidedValidateSet(){
@@ -795,6 +870,7 @@
     var isLastExercise = ui.guided.entryIndex >= loc.session.entries.length-1;
     if(isLastSetOfExercise && isLastExercise){
       clearInterval(guidedTimer); guidedTimer=null;
+      clearInterval(setStopwatchTimer); setStopwatchTimer=null;
       ui.guided.phase = "done";
       render();
       return;
@@ -811,7 +887,9 @@
     if(!ui.guided || ui.guided.phase!=="rest") return;
     clearInterval(guidedTimer); guidedTimer=null;
     ui.guided.phase = "log";
+    ui.guided.setStartedAt = Date.now();
     render();
+    startSetStopwatch();
   }
   function guidedSkipExercise(){
     if(!ui.guided) return;
@@ -820,11 +898,37 @@
     ui.guided.entryIndex++;
     ui.guided.setNumber = 1;
     if(!loc || ui.guided.entryIndex >= loc.session.entries.length){
+      clearInterval(setStopwatchTimer); setStopwatchTimer=null;
       ui.guided.phase = "done";
     } else {
       ui.guided.phase = "log";
+      ui.guided.setStartedAt = Date.now();
     }
     render();
+    if(ui.guided.phase==="log") startSetStopwatch();
+  }
+  function guidedGoBack(){
+    if(!ui.guided) return;
+    clearInterval(guidedTimer); guidedTimer=null;
+    var loc = findSession(ui.guided.sessionId);
+    if(!loc) return;
+    if(ui.guided.setNumber > 1){
+      ui.guided.setNumber--;
+    } else if(ui.guided.entryIndex > 0){
+      ui.guided.entryIndex--;
+    } else {
+      return;
+    }
+    var entry = loc.session.entries[ui.guided.entryIndex];
+    if(entry && entry.sets.length){
+      var lastSet = entry.sets[entry.sets.length-1];
+      deleteSet(ui.guided.sessionId, entry.exerciseId, lastSet.id);
+      ui.guided.setsLogged = Math.max(0, ui.guided.setsLogged-1);
+    }
+    ui.guided.phase = "log";
+    ui.guided.setStartedAt = Date.now();
+    render();
+    startSetStopwatch();
   }
 
   function stepBtn(delta,target,prop,label,ariaLabel){ return '<button data-action="step" data-target="'+target+'" data-prop="'+prop+'" data-delta="'+delta+'" aria-label="'+esc(ariaLabel||label)+'">'+label+'</button>'; }
@@ -884,10 +988,11 @@
     var tmp = arr[idx]; arr[idx] = arr[newIdx]; arr[newIdx] = tmp;
     save(); render();
   }
-  function updateExercise(exId, name, cat, muscle){
+  function updateExercise(exId, name, cat, muscle, howTo){
     var ex = getExercise(exId);
     if(!ex) return;
     ex.name = name; ex.cat = cat; ex.muscle = muscle;
+    if(howTo!==undefined) ex.howTo = howTo;
     save(); render();
   }
   function deleteExerciseFromLibrary(exId){
@@ -962,6 +1067,7 @@
         '<button data-action="moveex" data-session="'+session.id+'" data-ex="'+exId+'" data-dir="-1">↑ Monter</button>'+
         '<button data-action="moveex" data-session="'+session.id+'" data-ex="'+exId+'" data-dir="1">↓ Descendre</button>'+
         '<button data-action="'+linkAction+'" data-session="'+session.id+'" data-ex="'+exId+'">'+linkLabel+'</button>'+
+        '<button data-action="editexfromseance" data-ex="'+exId+'">✎ Modifier l’exercice</button>'+
         '<button class="danger" data-action="removeex" data-session="'+session.id+'" data-ex="'+exId+'">🗑 Retirer de la séance</button>'+
         '</div>';
     }
@@ -974,15 +1080,14 @@
       html += '<div class="objectif-row"><span class="obj-label">Objectif</span>'+
         '<input class="obj-input" type="number" inputmode="numeric" min="0" data-role="target-duration" data-session="'+session.id+'" data-ex="'+exId+'" value="'+target.duration+'" aria-label="Objectif de durée en minutes"> min ×'+
         '<input class="obj-input" type="number" inputmode="decimal" min="0" data-role="target-speed" data-session="'+session.id+'" data-ex="'+exId+'" value="'+target.speed+'" aria-label="Objectif de vitesse en km/h"> km/h ×'+
-        '<input class="obj-input" type="number" inputmode="decimal" min="0" data-role="target-distance" data-session="'+session.id+'" data-ex="'+exId+'" value="'+target.distance+'" aria-label="Objectif de distance en km"> km ·'+
-        '<input class="obj-input rest-input" type="number" inputmode="numeric" min="0" step="5" data-role="target-rest" data-session="'+session.id+'" data-ex="'+exId+'" value="'+(target.rest||90)+'" aria-label="Temps de repos en secondes">sec repos</div>';
+        '<input class="obj-input" type="number" inputmode="decimal" min="0" data-role="target-distance" data-session="'+session.id+'" data-ex="'+exId+'" value="'+target.distance+'" aria-label="Objectif de distance en km"> km</div>';
     } else {
       html += '<div class="objectif-row"><span class="obj-label">Objectif</span>'+
         '<input class="obj-input" type="number" inputmode="numeric" min="0" data-role="target-sets" data-session="'+session.id+'" data-ex="'+exId+'" value="'+target.sets+'" aria-label="Objectif de nombre de séries"> séries ×'+
         '<input class="obj-input" type="number" inputmode="numeric" min="0" data-role="target-reps" data-session="'+session.id+'" data-ex="'+exId+'" value="'+target.reps+'" aria-label="Objectif de nombre de répétitions"> reps ×'+
-        '<input class="obj-input" type="number" inputmode="decimal" min="0" data-role="target-weight" data-session="'+session.id+'" data-ex="'+exId+'" value="'+target.weight+'" aria-label="Objectif de poids en kg"> kg ·'+
-        '<input class="obj-input rest-input" type="number" inputmode="numeric" min="0" step="5" data-role="target-rest" data-session="'+session.id+'" data-ex="'+exId+'" value="'+(target.rest||90)+'" aria-label="Temps de repos en secondes">sec repos</div>';
+        '<input class="obj-input" type="number" inputmode="decimal" min="0" data-role="target-weight" data-session="'+session.id+'" data-ex="'+exId+'" value="'+target.weight+'" aria-label="Objectif de poids en kg"> kg</div>';
     }
+    html += '<div class="rest-line">⏱ repos <input class="rest-input-plain" type="number" inputmode="numeric" min="0" step="5" data-role="target-rest" data-session="'+session.id+'" data-ex="'+exId+'" value="'+(target.rest||90)+'" aria-label="Temps de repos en secondes"> sec entre les séries</div>';
 
     html += '<div class="result-row'+(metGoal?' met':'')+'">';
     html += sets.length ? chips : '<span class="result-empty">Aucune série validée</span>';
@@ -1069,8 +1174,7 @@
   function renderSessionDetail(day, session){
     var d = DAYS.filter(function(x){return x.id===day.id;})[0];
     var html = '<a class="back-link" data-action="closesession">‹ '+d.label+'</a>';
-    html += '<div class="sess-header"><div class="sess-title">'+esc(session.name||"Séance")+'</div></div>';
-    html += '<input class="name-input" type="text" placeholder="Nom de la séance (ex. Push, Jambes…)" value="'+esc(session.name||'')+'" data-role="sessionname" data-session="'+session.id+'">';
+    html += '<input class="name-input session-title-input" type="text" placeholder="Nom de la séance (ex. Push, Jambes…)" value="'+esc(session.name||'')+'" data-role="sessionname" data-session="'+session.id+'">';
     if(ui.linkFrom && ui.linkFrom.session===session.id){
       html += '<div class="link-hint">Ouvre le menu ⋮ de l’exercice à lier, puis « Lier en superset » — <a data-action="cancellink">annuler</a></div>';
     }
@@ -1087,6 +1191,29 @@
     return html;
   }
 
+  function sessionTotalSets(session){
+    var total = 0;
+    session.entries.forEach(function(e){
+      var ex = getExercise(e.exerciseId);
+      if(!ex) return;
+      total += isCardio(ex) ? 1 : ((e.target && e.target.sets) || 1);
+    });
+    return total;
+  }
+  function guidedProgressBarHTML(session){
+    var totalPlanned = sessionTotalSets(session);
+    var done = Math.min(ui.guided.setsLogged, totalPlanned || ui.guided.setsLogged);
+    var pct = totalPlanned>0 ? Math.round(done/totalPlanned*100) : 0;
+    return '<div class="guided-progress-wrap">'+
+      '<div class="guided-progress-bar"><div class="guided-progress-fill" style="width:'+pct+'%"></div></div>'+
+      '<div class="guided-progress-label">'+done+'/'+totalPlanned+' séries de la séance</div>'+
+      '</div>';
+  }
+  function targetSummary(ex, target){
+    if(isCardio(ex)) return target.duration+'min × '+target.speed+'km/h × '+target.distance+'km';
+    return target.sets+'×'+target.reps+'×'+target.weight+'kg';
+  }
+
   function renderGuided(){
     var loc = findSession(ui.guided.sessionId);
     if(!loc){ ui.guided=null; return renderSeance(); }
@@ -1095,12 +1222,26 @@
 
     if(ui.guided.phase==="done" || ui.guided.entryIndex >= entries.length){
       var mins = Math.max(1, Math.round((Date.now()-ui.guided.startedAt)/60000));
-      return '<div class="guided-wrap"><div class="guided-done">'+
+      var html2 = '<div class="guided-wrap"><div class="guided-done">'+
         '<div class="guided-done-icon">✓</div>'+
         '<div class="guided-done-title">Séance terminée</div>'+
-        '<div class="guided-done-sub">'+ui.guided.setsLogged+' série'+(ui.guided.setsLogged>1?'s':'')+' validée'+(ui.guided.setsLogged>1?'s':'')+' en '+mins+' min</div>'+
-        '<button class="validate-btn" data-action="guidedexit">Terminer</button>'+
+        '<div class="guided-done-sub">'+ui.guided.setsLogged+' série'+(ui.guided.setsLogged>1?'s':'')+' validée'+(ui.guided.setsLogged>1?'s':'')+' en '+mins+' min</div>';
+      html2 += '<div class="guided-summary-list">';
+      entries.forEach(function(e){
+        var exx = getExercise(e.exerciseId);
+        if(!exx) return;
+        var cardioX = isCardio(exx);
+        var groups = groupSets(e.sets, cardioX);
+        var partsTxt = groups.map(function(g){
+          return (g.count>1 ? g.count+'× ' : '') + (cardioX ? (g.distance+'km·'+g.speed+'km/h') : (g.weight+'kg×'+g.reps));
+        }).join(', ');
+        html2 += '<div class="guided-summary-row"><span class="gsr-name">'+esc(exx.name)+'</span>'+
+          '<span class="gsr-detail">'+(partsTxt||'—')+'</span></div>';
+      });
+      html2 += '</div>';
+      html2 += '<button class="validate-btn" data-action="guidedexit">Terminer</button>'+
         '</div></div>';
+      return html2;
     }
 
     var entry = entries[ui.guided.entryIndex];
@@ -1109,34 +1250,41 @@
     var target = entry.target || {};
     var cardio = isCardio(ex);
     var totalSets = cardio ? 1 : (target.sets||1);
+    var canGoBack = ui.guided.entryIndex>0 || ui.guided.setNumber>1;
 
     if(ui.guided.phase==="rest"){
       var remaining = (ui.guided.restEndsAt - Date.now())/1000;
-      var nextLabel;
+      var nextLabel, nextTargetTxt;
       if(ui.guided.setNumber<=totalSets){
         nextLabel = esc(ex.name)+' — Série '+ui.guided.setNumber+'/'+totalSets;
+        nextTargetTxt = targetSummary(ex, target);
       } else {
         var nextEntry = entries[ui.guided.entryIndex+1];
         var nextEx = nextEntry ? getExercise(nextEntry.exerciseId) : null;
         nextLabel = nextEx ? esc(nextEx.name) : 'Fin de séance';
+        nextTargetTxt = (nextEx && nextEntry) ? targetSummary(nextEx, nextEntry.target||{}) : '';
       }
       return '<div class="guided-wrap"><div class="guided-rest">'+
+        guidedProgressBarHTML(session)+
         '<div class="rest-label">Repos</div>'+
         '<div class="rest-countdown" id="restCountdown">'+formatTime(remaining)+'</div>'+
-        '<div class="rest-next">Ensuite : '+nextLabel+'</div>'+
+        '<div class="rest-next">Ensuite : '+nextLabel+(nextTargetTxt?' <span class="rest-next-target">· '+nextTargetTxt+'</span>':'')+'</div>'+
         '<button class="cta-btn" data-action="guidedskiprest">Passer le repos</button>'+
         '<textarea class="note-area guided-note" placeholder="Note sur '+esc(ex.name)+'…" data-role="note" data-session="'+session.id+'" data-ex="'+entry.exerciseId+'">'+esc(entry.note||"")+'</textarea>'+
-        '<a class="back-link" data-action="guidedexit">Quitter le mode guidé</a>'+
-        '</div></div>';
+        '</div>'+
+        '<a class="guided-quit-btn" data-action="guidedexit">Quitter le mode guidé</a>'+
+        '</div>';
     }
 
     var d = draftFor(entry.exerciseId);
     var flash = !!ui.guided.justFinishedRest;
     ui.guided.justFinishedRest = false;
     var html = '<div class="guided-wrap"><div class="guided-log'+(flash?' rest-flash':'')+'">';
+    html += guidedProgressBarHTML(session);
     html += '<div class="guided-progress">Exercice '+(ui.guided.entryIndex+1)+'/'+entries.length+'</div>';
+    html += '<textarea class="note-area howto-area" placeholder="Comment faire cet exercice… (modifiable)" data-role="howto" data-ex="'+entry.exerciseId+'">'+esc(ex.howTo||"")+'</textarea>';
     html += '<div class="guided-ex-name">'+esc(ex.name)+'</div>';
-    html += '<div class="guided-set-num">Série '+ui.guided.setNumber+'/'+totalSets+'</div>';
+    html += '<div class="guided-set-num">Série '+ui.guided.setNumber+'/'+totalSets+' · <span id="setStopwatch" class="set-stopwatch">0:00</span></div>';
     if(cardio){
       html += '<div class="guided-target-hint">Objectif : '+target.duration+' min × '+target.speed+' km/h × '+target.distance+' km</div>';
       html += '<div class="stepper-row"><span class="stepper-label">Durée (min)</span><div class="stepper">'+
@@ -1164,8 +1312,12 @@
     }
     html += '<button class="validate-btn" data-action="guidedvalidate">Valider la série</button>';
     html += '<textarea class="note-area guided-note" placeholder="Note sur '+esc(ex.name)+'…" data-role="note" data-session="'+session.id+'" data-ex="'+entry.exerciseId+'">'+esc(entry.note||"")+'</textarea>';
-    html += '<div class="guided-footer"><a data-action="guidedskipexercise">Passer cet exercice ›</a><a data-action="guidedexit">Quitter</a></div>';
-    html += '</div></div>';
+    html += '<div class="guided-footer">'+
+      (canGoBack ? '<a data-action="guidedgoback">◂ Précédent</a>' : '')+
+      '<a data-action="guidedskipexercise">Passer cet exercice ›</a></div>';
+    html += '</div>';
+    html += '<a class="guided-quit-btn" data-action="guidedexit">Quitter le mode guidé</a>';
+    html += '</div>';
     return html;
   }
 
@@ -1202,6 +1354,7 @@
             '<input type="text" id="editExName" value="'+esc(ex.name)+'">'+
             '<select id="editExCat">'+CAT_ORDER.map(function(c){return '<option'+(c===ex.cat?' selected':'')+'>'+c+'</option>';}).join('')+'</select>'+
             '<select id="editExMuscle">'+MUSCLE_ORDER.map(function(m){return '<option'+(m===ex.muscle?' selected':'')+'>'+m+'</option>';}).join('')+'</select>'+
+            '<textarea class="note-area" id="editExHowTo" placeholder="Comment faire cet exercice…">'+esc(ex.howTo||"")+'</textarea>'+
             '<div class="btn-row"><button class="cancel" data-action="canceleditex">Annuler</button><button class="create" data-action="saveeditex" data-ex="'+ex.id+'">Enregistrer</button></div>'+
             '</div>';
         } else {
@@ -1276,7 +1429,9 @@
       '<button class="backup-btn" data-action="exportdata">Exporter mes données</button>'+
       '<button class="backup-btn" data-action="importdata">Restaurer une sauvegarde</button>'+
       '</div>';
+    html += '<button class="backup-btn" style="width:100%; margin-bottom:20px;" data-action="importhowto">📋 Importer les fiches techniques</button>';
     html += '<input type="file" id="importFile" accept="application/json" style="display:none">';
+    html += '<input type="file" id="importHowToFile" accept="application/json" style="display:none">';
     return html;
   }
 
@@ -1409,13 +1564,20 @@
     } else if(action==="startguided"){
       startGuided(t.dataset.session);
     } else if(action==="guidedvalidate"){
+      unlockGuidedAudio();
       guidedValidateSet();
     } else if(action==="guidedskiprest"){
+      unlockGuidedAudio();
       guidedSkipRest();
     } else if(action==="guidedskipexercise"){
+      unlockGuidedAudio();
       guidedSkipExercise();
+    } else if(action==="guidedgoback"){
+      guidedGoBack();
     } else if(action==="guidedexit"){
       exitGuided();
+    } else if(action==="editexfromseance"){
+      ui.editingExercise = t.dataset.ex; ui.tab = "exercices"; render();
     } else if(action==="togglemenu"){
       ui.openMenu = (ui.openMenu===t.dataset.ex) ? null : t.dataset.ex;
       render();
@@ -1442,8 +1604,9 @@
       if(!newName){ window.alert("Le nom ne peut pas être vide."); return; }
       var newCat = document.getElementById("editExCat").value;
       var newMuscle = document.getElementById("editExMuscle").value;
+      var newHowTo = document.getElementById("editExHowTo").value;
       ui.editingExercise = null;
-      updateExercise(t.dataset.ex, newName, newCat, newMuscle);
+      updateExercise(t.dataset.ex, newName, newCat, newMuscle, newHowTo);
     } else if(action==="deleteex"){
       deleteExerciseFromLibrary(t.dataset.ex);
     } else if(action==="createex"){
@@ -1462,6 +1625,8 @@
       exportData();
     } else if(action==="importdata"){
       document.getElementById("importFile").click();
+    } else if(action==="importhowto"){
+      document.getElementById("importHowToFile").click();
     }
   });
 
@@ -1504,6 +1669,19 @@
       };
       reader.readAsText(t.files[0]);
     }
+    if(t.id==="importHowToFile" && t.files && t.files[0]){
+      var reader2 = new FileReader();
+      reader2.onload = function(){
+        try{
+          var data2 = JSON.parse(reader2.result);
+          var count = mergeHowToImport(data2);
+          window.alert(count+" exercice"+(count>1?"s":"")+" mis à jour avec leur fiche technique.");
+        }catch(e){
+          window.alert("Impossible de lire ce fichier.");
+        }
+      };
+      reader2.readAsText(t.files[0]);
+    }
     if(t.dataset.action==="setval"){
       var d = draftFor(t.dataset.target);
       var v = parseFloat(t.value);
@@ -1514,6 +1692,8 @@
       setSessionName(t.dataset.session, t.value.trim());
     } else if(t.dataset.role==="note"){
       setNote(t.dataset.session, t.dataset.ex, t.value);
+    } else if(t.dataset.role==="howto"){
+      setHowTo(t.dataset.ex, t.value);
     } else if(t.dataset.role && t.dataset.role.indexOf("target-")===0){
       var prop = t.dataset.role.replace("target-","");
       var v2 = parseFloat(t.value);
@@ -1549,9 +1729,6 @@
     currentTheme = currentTheme==="light" ? "dark" : "light";
     applyTheme(currentTheme);
     try{ localStorage.setItem(THEME_KEY, currentTheme); }catch(e){}
-  });
-  document.getElementById("icloudBackupBtn").addEventListener("click", function(){
-    exportData();
   });
 
   render();
