@@ -306,12 +306,11 @@
     margin-bottom:14px;
   }
   .guided-wrap{
-    display:flex; flex-direction:column; align-items:center; justify-content:space-between;
-    min-height:calc(100vh - 230px); text-align:center; padding:20px 0 10px;
+    display:flex; flex-direction:column; align-items:center;
+    text-align:center; padding:0 0 20px;
   }
   .guided-log, .guided-rest, .guided-done{ width:100%; max-width:340px; display:flex; flex-direction:column; align-items:center; }
-  .guided-progress{ font-size:12px; color:var(--dim-2); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:10px; }
-  .guided-progress-wrap{ width:100%; margin-bottom:16px; }
+  .guided-progress-wrap{ width:100%; margin-bottom:14px; }
   .guided-progress-bar{ width:100%; height:6px; background:var(--surface-2); border-radius:999px; overflow:hidden; margin-bottom:6px; }
   .guided-progress-fill{ height:100%; background:var(--accent); border-radius:999px; transition:width .3s ease; }
   .guided-progress-label{ font-size:11px; color:var(--dim-2); text-align:center; }
@@ -324,18 +323,40 @@
   .guided-summary-row:last-child{ border-bottom:none; }
   .gsr-name{ font-weight:700; }
   .gsr-detail{ color:var(--dim); text-align:right; }
-  .howto-area{ width:100%; text-align:left; margin-top:0; margin-bottom:16px; min-height:36px; }
-  .guided-ex-name{ font-size:24px; font-weight:800; margin-bottom:4px; }
-  .guided-set-num{ font-size:15px; color:var(--dim); margin-bottom:16px; }
-  .set-stopwatch{ font-variant-numeric:tabular-nums; font-weight:800; color:var(--chalk); }
+  .guided-ex-name{ font-size:24px; font-weight:800; margin-bottom:10px; }
+  .howto-btn{
+    background:var(--surface-2); border:1px solid var(--border); border-radius:999px;
+    padding:8px 16px; font-size:13px; font-weight:700; color:var(--dim); margin-bottom:16px;
+  }
+  .howto-overlay{
+    position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:50;
+    display:flex; align-items:flex-end; justify-content:center;
+  }
+  .howto-modal{
+    width:100%; max-width:480px; background:var(--surface); border-radius:20px 20px 0 0;
+    padding:20px 20px calc(20px + var(--safe-b)); max-height:75vh; overflow-y:auto;
+    text-align:left;
+  }
+  .howto-modal-title{ font-size:17px; font-weight:800; margin-bottom:12px; }
+  .howto-edit-area{
+    width:100%; min-height:160px; background:var(--surface-2); border:1px solid var(--border);
+    border-radius:12px; padding:12px 14px; color:var(--chalk); font-size:14.5px; font-family:inherit;
+    line-height:1.6; margin-bottom:14px; resize:vertical;
+  }
+  .howto-edit-area:focus{ outline:none; border-color:var(--accent); }
+  .howto-edit-area::placeholder{ color:var(--dim-2); }
+  .set-stopwatch-big{ margin-bottom:10px; }
   .guided-target-hint{ font-size:13px; color:var(--dim); background:var(--surface-2); border:1px solid var(--border); border-radius:999px; padding:7px 16px; margin-bottom:22px; }
   .guided-log .stepper-row{ width:100%; margin-bottom:16px; }
   .guided-log .validate-btn{ margin-top:6px; }
-  .guided-footer{ display:flex; gap:28px; margin-top:20px; font-size:12px; }
-  .guided-footer a{ color:var(--dim-2); padding:8px; }
-  .guided-quit-btn{
-    display:block; color:var(--dim-2); font-size:13px; padding:16px; margin-top:20px;
+  .guided-back-row{ margin-top:14px; }
+  .guided-back-row a{ color:var(--dim-2); font-size:13px; padding:8px; }
+  .guided-btn{
+    width:100%; padding:13px; border:none; border-radius:12px;
+    font-size:15px; font-weight:700; margin-top:12px;
   }
+  .guided-btn-skip{ background:var(--cat-echauffement); color:#141416; }
+  .guided-btn-quit{ background:#c0392b; color:#fff; }
 
   @keyframes restFlash{
     0%{ box-shadow:0 0 0 0 var(--success-dim); }
@@ -783,7 +804,7 @@
     clearInterval(guidedTimer); guidedTimer = null;
     unlockGuidedAudio();
     requestWakeLock();
-    ui.guided = {sessionId:sessionId, entryIndex:0, setNumber:1, phase:"log", restEndsAt:null, startedAt:Date.now(), setsLogged:0, setStartedAt:Date.now()};
+    ui.guided = {sessionId:sessionId, entryIndex:0, setNumber:1, phase:"log", restEndsAt:null, startedAt:Date.now(), setsLogged:0, setStartedAt:Date.now(), showHowTo:false};
     ui.tab = "seance"; ui.activeSession = sessionId;
     render();
     startSetStopwatch();
@@ -1101,24 +1122,24 @@
       if(cardio){
         html += '<div class="stepper-row"><span class="stepper-label">Durée (min)</span><div class="stepper">'+
           stepBtn(-5,exId,"duration","−","Diminuer la durée de 5 minutes")+
-          '<input class="num" type="number" inputmode="numeric" data-action="setval" data-target="'+exId+'" data-prop="duration" value="'+d.duration+'">'+
+          '<input class="num" type="text" inputmode="numeric" data-action="setval" data-target="'+exId+'" data-prop="duration" value="'+d.duration+'">'+
           stepBtn(5,exId,"duration","+","Augmenter la durée de 5 minutes")+'</div></div>';
         html += '<div class="stepper-row"><span class="stepper-label">Vitesse (km/h)</span><div class="stepper">'+
           stepBtn(-0.5,exId,"speed","−","Diminuer la vitesse de 0,5 km/h")+
-          '<input class="num" type="number" inputmode="decimal" data-action="setval" data-target="'+exId+'" data-prop="speed" value="'+d.speed+'">'+
+          '<input class="num" type="text" inputmode="decimal" data-action="setval" data-target="'+exId+'" data-prop="speed" value="'+d.speed+'">'+
           stepBtn(0.5,exId,"speed","+","Augmenter la vitesse de 0,5 km/h")+'</div></div>';
         html += '<div class="stepper-row"><span class="stepper-label">Distance (km)</span><div class="stepper">'+
           stepBtn(-0.5,exId,"distance","−","Diminuer la distance de 0,5 km")+
-          '<input class="num" type="number" inputmode="decimal" data-action="setval" data-target="'+exId+'" data-prop="distance" value="'+d.distance+'">'+
+          '<input class="num" type="text" inputmode="decimal" data-action="setval" data-target="'+exId+'" data-prop="distance" value="'+d.distance+'">'+
           stepBtn(0.5,exId,"distance","+","Augmenter la distance de 0,5 km")+'</div></div>';
       } else {
         html += '<div class="stepper-row"><span class="stepper-label">Poids (kg)</span><div class="stepper">'+
           stepBtn(-1,exId,"weight","−","Diminuer le poids de 1 kg")+
-          '<input class="num" type="number" inputmode="decimal" data-action="setval" data-target="'+exId+'" data-prop="weight" value="'+d.weight+'">'+
+          '<input class="num" type="text" inputmode="decimal" data-action="setval" data-target="'+exId+'" data-prop="weight" value="'+d.weight+'">'+
           stepBtn(1,exId,"weight","+","Augmenter le poids de 1 kg")+'</div></div>';
         html += '<div class="stepper-row"><span class="stepper-label">Répétitions</span><div class="stepper">'+
           stepBtn(-1,exId,"reps","−","Diminuer le nombre de répétitions")+
-          '<input class="num" type="number" inputmode="numeric" data-action="setval" data-target="'+exId+'" data-prop="reps" value="'+d.reps+'">'+
+          '<input class="num" type="text" inputmode="numeric" data-action="setval" data-target="'+exId+'" data-prop="reps" value="'+d.reps+'">'+
           stepBtn(1,exId,"reps","+","Augmenter le nombre de répétitions")+'</div></div>';
       }
       html += '<button class="validate-btn" data-action="addset" data-session="'+session.id+'" data-ex="'+exId+'">Valider</button>';
@@ -1252,6 +1273,15 @@
     var totalSets = cardio ? 1 : (target.sets||1);
     var canGoBack = ui.guided.entryIndex>0 || ui.guided.setNumber>1;
 
+    var howToOverlay = "";
+    if(ui.guided.showHowTo){
+      howToOverlay = '<div class="howto-overlay" data-action="closehowto"><div class="howto-modal" data-action="noop">'+
+        '<div class="howto-modal-title">'+esc(ex.name)+'</div>'+
+        '<textarea class="howto-edit-area" placeholder="Comment faire cet exercice… (modifiable)" data-role="howto" data-ex="'+entry.exerciseId+'">'+esc(ex.howTo||"")+'</textarea>'+
+        '<button class="cta-btn" data-action="closehowto">Fermer</button>'+
+        '</div></div>';
+    }
+
     if(ui.guided.phase==="rest"){
       var remaining = (ui.guided.restEndsAt - Date.now())/1000;
       var nextLabel, nextTargetTxt;
@@ -1269,11 +1299,10 @@
         '<div class="rest-label">Repos</div>'+
         '<div class="rest-countdown" id="restCountdown">'+formatTime(remaining)+'</div>'+
         '<div class="rest-next">Ensuite : '+nextLabel+(nextTargetTxt?' <span class="rest-next-target">· '+nextTargetTxt+'</span>':'')+'</div>'+
-        '<button class="cta-btn" data-action="guidedskiprest">Passer le repos</button>'+
+        '<button class="guided-btn guided-btn-skip" data-action="guidedskiprest">Passer le repos</button>'+
         '<textarea class="note-area guided-note" placeholder="Note sur '+esc(ex.name)+'…" data-role="note" data-session="'+session.id+'" data-ex="'+entry.exerciseId+'">'+esc(entry.note||"")+'</textarea>'+
-        '</div>'+
-        '<a class="guided-quit-btn" data-action="guidedexit">Quitter le mode guidé</a>'+
-        '</div>';
+        '<button class="guided-btn guided-btn-quit" data-action="guidedexit">Quitter le mode guidé</button>'+
+        '</div></div>';
     }
 
     var d = draftFor(entry.exerciseId);
@@ -1281,42 +1310,41 @@
     ui.guided.justFinishedRest = false;
     var html = '<div class="guided-wrap"><div class="guided-log'+(flash?' rest-flash':'')+'">';
     html += guidedProgressBarHTML(session);
-    html += '<div class="guided-progress">Exercice '+(ui.guided.entryIndex+1)+'/'+entries.length+'</div>';
-    html += '<textarea class="note-area howto-area" placeholder="Comment faire cet exercice… (modifiable)" data-role="howto" data-ex="'+entry.exerciseId+'">'+esc(ex.howTo||"")+'</textarea>';
     html += '<div class="guided-ex-name">'+esc(ex.name)+'</div>';
-    html += '<div class="guided-set-num">Série '+ui.guided.setNumber+'/'+totalSets+' · <span id="setStopwatch" class="set-stopwatch">0:00</span></div>';
+    html += '<button class="howto-btn" data-action="togglehowto">📋 Guide technique</button>';
+    html += '<div class="rest-countdown set-stopwatch-big" id="setStopwatch">0:00</div>';
     if(cardio){
-      html += '<div class="guided-target-hint">Objectif : '+target.duration+' min × '+target.speed+' km/h × '+target.distance+' km</div>';
+      html += '<div class="guided-target-hint">'+target.duration+' min × '+target.speed+' km/h × '+target.distance+' km · Série '+ui.guided.setNumber+'/'+totalSets+'</div>';
       html += '<div class="stepper-row"><span class="stepper-label">Durée (min)</span><div class="stepper">'+
         stepBtn(-5,entry.exerciseId,"duration","−","Diminuer la durée")+
-        '<input class="num" type="number" inputmode="numeric" data-action="setval" data-target="'+entry.exerciseId+'" data-prop="duration" value="'+d.duration+'">'+
+        '<input class="num" type="text" inputmode="numeric" data-action="setval" data-target="'+entry.exerciseId+'" data-prop="duration" value="'+d.duration+'">'+
         stepBtn(5,entry.exerciseId,"duration","+","Augmenter la durée")+'</div></div>';
       html += '<div class="stepper-row"><span class="stepper-label">Vitesse (km/h)</span><div class="stepper">'+
         stepBtn(-0.5,entry.exerciseId,"speed","−","Diminuer la vitesse")+
-        '<input class="num" type="number" inputmode="decimal" data-action="setval" data-target="'+entry.exerciseId+'" data-prop="speed" value="'+d.speed+'">'+
+        '<input class="num" type="text" inputmode="decimal" data-action="setval" data-target="'+entry.exerciseId+'" data-prop="speed" value="'+d.speed+'">'+
         stepBtn(0.5,entry.exerciseId,"speed","+","Augmenter la vitesse")+'</div></div>';
       html += '<div class="stepper-row"><span class="stepper-label">Distance (km)</span><div class="stepper">'+
         stepBtn(-0.5,entry.exerciseId,"distance","−","Diminuer la distance")+
-        '<input class="num" type="number" inputmode="decimal" data-action="setval" data-target="'+entry.exerciseId+'" data-prop="distance" value="'+d.distance+'">'+
+        '<input class="num" type="text" inputmode="decimal" data-action="setval" data-target="'+entry.exerciseId+'" data-prop="distance" value="'+d.distance+'">'+
         stepBtn(0.5,entry.exerciseId,"distance","+","Augmenter la distance")+'</div></div>';
     } else {
-      html += '<div class="guided-target-hint">Objectif : '+target.sets+' × '+target.reps+' × '+target.weight+' kg</div>';
+      html += '<div class="guided-target-hint">'+target.sets+' × '+target.reps+' × '+target.weight+' kg · Série '+ui.guided.setNumber+'/'+totalSets+'</div>';
       html += '<div class="stepper-row"><span class="stepper-label">Poids (kg)</span><div class="stepper">'+
         stepBtn(-1,entry.exerciseId,"weight","−","Diminuer le poids")+
-        '<input class="num" type="number" inputmode="decimal" data-action="setval" data-target="'+entry.exerciseId+'" data-prop="weight" value="'+d.weight+'">'+
+        '<input class="num" type="text" inputmode="decimal" data-action="setval" data-target="'+entry.exerciseId+'" data-prop="weight" value="'+d.weight+'">'+
         stepBtn(1,entry.exerciseId,"weight","+","Augmenter le poids")+'</div></div>';
       html += '<div class="stepper-row"><span class="stepper-label">Répétitions</span><div class="stepper">'+
         stepBtn(-1,entry.exerciseId,"reps","−","Diminuer les répétitions")+
-        '<input class="num" type="number" inputmode="numeric" data-action="setval" data-target="'+entry.exerciseId+'" data-prop="reps" value="'+d.reps+'">'+
+        '<input class="num" type="text" inputmode="numeric" data-action="setval" data-target="'+entry.exerciseId+'" data-prop="reps" value="'+d.reps+'">'+
         stepBtn(1,entry.exerciseId,"reps","+","Augmenter les répétitions")+'</div></div>';
     }
     html += '<button class="validate-btn" data-action="guidedvalidate">Valider la série</button>';
     html += '<textarea class="note-area guided-note" placeholder="Note sur '+esc(ex.name)+'…" data-role="note" data-session="'+session.id+'" data-ex="'+entry.exerciseId+'">'+esc(entry.note||"")+'</textarea>';
-    html += '<div class="guided-footer">'+
-      (canGoBack ? '<a data-action="guidedgoback">◂ Précédent</a>' : '')+
-      '<a data-action="guidedskipexercise">Passer cet exercice ›</a></div>';
+    if(canGoBack) html += '<div class="guided-back-row"><a data-action="guidedgoback">◂ Précédent</a></div>';
+    html += '<button class="guided-btn guided-btn-skip" data-action="guidedskipexercise">Passer cet exercice</button>';
+    html += '<button class="guided-btn guided-btn-quit" data-action="guidedexit">Quitter le mode guidé</button>';
     html += '</div>';
-    html += '<a class="guided-quit-btn" data-action="guidedexit">Quitter le mode guidé</a>';
+    html += howToOverlay;
     html += '</div>';
     return html;
   }
@@ -1513,7 +1541,6 @@
       if(ui.tab==="historique") ui.historyDetail = null;
       ui.linkFrom = null;
       ui.openMenu = null;
-      if(ui.guided){ clearInterval(guidedTimer); guidedTimer=null; ui.guided=null; }
       render();
     });
   });
@@ -1576,6 +1603,14 @@
       guidedGoBack();
     } else if(action==="guidedexit"){
       exitGuided();
+    } else if(action==="togglehowto"){
+      ui.guided.showHowTo = !ui.guided.showHowTo;
+      render();
+    } else if(action==="closehowto"){
+      ui.guided.showHowTo = false;
+      render();
+    } else if(action==="noop"){
+      // absorb clicks inside the how-to modal so they don't bubble to the closing overlay
     } else if(action==="editexfromseance"){
       ui.editingExercise = t.dataset.ex; ui.tab = "exercices"; render();
     } else if(action==="togglemenu"){
@@ -1713,6 +1748,13 @@
     } else if(t.classList.contains("note-area")){
       t.style.height = "auto";
       t.style.height = t.scrollHeight + "px";
+    }
+  });
+
+  document.getElementById("app").addEventListener("focusin", function(ev){
+    var t = ev.target;
+    if(t.tagName==="INPUT" && t.classList.contains("num")){
+      try{ t.select(); }catch(e){}
     }
   });
 
