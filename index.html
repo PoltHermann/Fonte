@@ -604,7 +604,7 @@
   if(!state.settings.warmupDefaultByDay || typeof state.settings.warmupDefaultByDay!=="object") state.settings.warmupDefaultByDay = {};
   if(typeof state.settings.defaultRestSeconds!=="number") state.settings.defaultRestSeconds = 90;
   if(typeof state.settings.devMode!=="boolean") state.settings.devMode = false;
-  var ui = { tab:"seance", activeDay:null, activeSession:null, newSessionForm:false, openExercise:null, historyDetail:null, draft:{}, exerciseQuery:"", linkFrom:null, editingExercise:null, openMenu:null, guided:null, editingWarmupId:null, newWarmupForm:false, exercisePickerFor:null, warmupPicker:null };
+  var ui = { tab:"seance", activeDay:null, activeSession:null, newSessionForm:false, openExercise:null, historyDetail:null, draft:{}, exerciseQuery:"", linkFrom:null, editingExercise:null, openMenu:null, guided:null, editingWarmupId:null, newWarmupForm:false, exercisePickerFor:null, warmupPicker:null, scrollToEditEx:false };
   var guidedTimer = null;
 
   var DEFAULT_TARGET = {sets:3, reps:8, weight:20, rest:90};
@@ -782,9 +782,16 @@
     if(!ui.draft[exId]){
       var ex = getExercise(exId);
       if(isCardio(ex)){
-        ui.draft[exId] = { duration: ex.lastDuration || 20, speed: ex.lastSpeed || 10, distance: ex.lastDistance || 3 };
+        ui.draft[exId] = {
+          duration: (ex.lastDuration!==undefined && ex.lastDuration!==null) ? ex.lastDuration : 20,
+          speed: (ex.lastSpeed!==undefined && ex.lastSpeed!==null) ? ex.lastSpeed : 10,
+          distance: (ex.lastDistance!==undefined && ex.lastDistance!==null) ? ex.lastDistance : 3
+        };
       } else {
-        ui.draft[exId] = { weight: ex.lastWeight || 20, reps: ex.lastReps || 8 };
+        ui.draft[exId] = {
+          weight: (ex.lastWeight!==undefined && ex.lastWeight!==null) ? ex.lastWeight : 20,
+          reps: (ex.lastReps!==undefined && ex.lastReps!==null) ? ex.lastReps : 8
+        };
       }
     }
     return ui.draft[exId];
@@ -1946,7 +1953,15 @@
     else if(ui.tab==="exercices") view.innerHTML = renderExercices();
     else view.innerHTML = renderHistorique();
     if(!ui.guided && ui.warmupPicker) view.innerHTML += renderWarmupPicker();
-    if(main) main.scrollTop = scrollPos;
+    if(ui.scrollToEditEx){
+      ui.scrollToEditEx = false;
+      var editForm = view.querySelector(".edit-ex-form");
+      if(editForm){
+        try{ editForm.scrollIntoView({block:"center"}); }catch(e){}
+      } else if(main) main.scrollTop = scrollPos;
+    } else if(main){
+      main.scrollTop = scrollPos;
+    }
     autoSizeTextareas();
     view.classList.remove("fade-in");
     void view.offsetWidth;
@@ -2112,7 +2127,7 @@
     } else if(action==="noop"){
       // absorb clicks inside the how-to modal so they don't bubble to the closing overlay
     } else if(action==="editexfromseance"){
-      ui.editingExercise = t.dataset.ex; ui.tab = "exercices"; render();
+      ui.editingExercise = t.dataset.ex; ui.exerciseQuery = ""; ui.tab = "exercices"; ui.scrollToEditEx = true; render();
     } else if(action==="togglemenu"){
       ui.openMenu = (ui.openMenu===t.dataset.ex) ? null : t.dataset.ex;
       render();
