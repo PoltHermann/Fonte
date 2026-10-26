@@ -24,6 +24,7 @@
     --accent-dim:#3a1f19;
     --success:#3aa15c;
     --success-dim: rgba(58,161,92,0.14);
+    --warm:#34d399; --warm-dim:rgba(52,211,153,0.13); --on-warm:#06281c;
     --cat-echauffement:#e8b923;
     --cat-musculation:#e5482c;
     --cat-calisthenie:#3f7fe3;
@@ -46,6 +47,7 @@
     --accent-dim:#fbe0d9;
     --success:#2f8f52;
     --success-dim: rgba(47,143,82,0.12);
+    --warm:#047857; --warm-dim:rgba(4,120,87,0.10); --on-warm:#ffffff;
   }
   body{ transition: background-color .2s ease, color .2s ease; }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
@@ -463,6 +465,23 @@
   .g-top .howto-btn{ margin:0; min-height:40px; }
   .guided-progress-label{ font-size:12px; color:var(--dim); }
   .g-live{ display:inline-flex; align-items:center; gap:8px; font-size:12px; font-weight:800; letter-spacing:.07em; text-transform:uppercase; color:var(--accent-text); }
+  .exercise-card.warm{ border-color:var(--warm); background:linear-gradient(var(--warm-dim),var(--warm-dim)),var(--surface); }
+  .exercise-card.warm .ex-head{ cursor:default; }
+  .warm-tag{ margin-right:8px; }
+  .warm-label{ margin:2px 0 8px; font-size:11px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:var(--warm); }
+  .warm-section-title{ margin:16px 4px 8px; font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:var(--warm); }
+  .warm-section-title.std{ color:var(--dim); }
+  .warm-add-btn{ display:block; width:100%; margin:4px 0 14px; padding:12px; border:1.5px dashed var(--warm); border-radius:var(--radius); background:transparent; color:var(--warm); font-size:14px; font-weight:700; cursor:pointer; }
+  .warm-progress{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:10px; font-size:13px; color:var(--dim); }
+  .warm-done-btn{ padding:9px 16px; border:0; border-radius:12px; background:var(--warm); color:var(--on-warm); font-size:14px; font-weight:800; cursor:pointer; }
+  .g-top.warm .g-live{ color:var(--warm); }
+  .g-top.warm .g-live i{ background:var(--warm); }
+  .g-top.warm .guided-progress-fill{ background:var(--warm); }
+  .guided-screen.warm .validate-btn{ background:var(--warm); color:var(--on-warm); }
+  .warmup-picker-count{ color:var(--dim); font-size:12px; margin-left:6px; font-weight:500; }
+  .g-toprow{ display:flex; align-items:center; justify-content:space-between; width:100%; }
+  .g-clock{ font-size:12px; font-weight:700; color:var(--dim); letter-spacing:.04em; }
+  .g-clock b{ margin-left:4px; font-size:17px; font-weight:800; letter-spacing:0; color:var(--chalk); font-variant-numeric:tabular-nums; }
   .g-live i{ width:8px; height:8px; border-radius:50%; background:var(--accent); animation:livePulse 1.4s ease-in-out infinite; }
   @keyframes livePulse{ 0%{ box-shadow:0 0 0 0 rgba(229,72,44,.55); } 70%{ box-shadow:0 0 0 7px rgba(229,72,44,0); } 100%{ box-shadow:0 0 0 0 rgba(229,72,44,0); } }
   .g-mid{ flex:1; min-height:0; display:flex; flex-direction:column; align-items:center; justify-content:center; width:100%; }
@@ -705,55 +724,228 @@
     return String(s===null||s===undefined ? "" : s).replace(/[&<>"']/g, function(c){ return ESC_MAP[c]; });
   }
 
-  function load(){
-    try{
-      var raw = localStorage.getItem(STORAGE_KEY);
-      if(raw) return JSON.parse(raw);
-    }catch(e){}
+  // ── État persistant : chargement sûr, réparation, mesure du stockage ──────────
+  var stateChars = 0, otherChars = 0, loadNotice = null, repairedCount = 0;
+  var STORAGE_BUDGET_CHARS = 2500000;   // ≈ 5 Mo en UTF-16 : hypothèse prudente (iOS n'indique pas le quota exact)
+  var STORAGE_WARN_RATIO = 0.8;         // alerte à partir de 80 % du budget
+  var CORRUPT_KEY = STORAGE_KEY + "_illisible";
+  function isObj(x){ return !!x && typeof x==="object" && !Array.isArray(x); }
+  function defaultState(){
     return {
-      exercises: DEFAULT_EXERCISES,
+      exercises: JSON.parse(JSON.stringify(DEFAULT_EXERCISES)),
       days: DAYS.map(function(d){ return {id:d.id, sessions:[]}; }),
       history: [],
       warmups: [],
       settings: {warmupDefaultByDay:{}, defaultRestSeconds:90, devMode:false}
     };
   }
+  function load(){
+    var raw = null;
+    try{ raw = localStorage.getItem(STORAGE_KEY); }catch(e){}
+    if(raw){
+      var parsed = null;
+      try{ parsed = JSON.parse(raw); }catch(e){}
+      if(isObj(parsed)){ stateChars = raw.length; return parsed; }
+      // Données illisibles : on garde une copie brute AVANT que le prochain save() n'écrase tout.
+      var kept = false;
+      try{ localStorage.setItem(CORRUPT_KEY, raw); kept = true; }catch(e){}
+      loadNotice = {title:"Données illisibles",
+        text: kept ? "Tes données enregistrées étaient abîmées. Une copie brute est conservée (Paramètres → Sauvegarde). Restaure ta dernière sauvegarde exportée."
+                   : "Tes données enregistrées étaient abîmées et la copie de secours n’a pas pu être conservée. Restaure ta dernière sauvegarde exportée."};
+    }
+    return defaultState();
+  }
+  // Rend l'état utilisable quoi qu'il contienne (ancien export, import partiel, stockage abîmé).
+  // Chaque élément retiré ou reconstruit incrémente repairedCount (pour prévenir l'utilisateur).
+  function arr(v){ if(Array.isArray(v)) return v; if(v!==undefined && v!==null) repairedCount++; return []; }
+  function healEntries(list, exercises){
+    var kept = [];
+    arr(list).forEach(function(en){
+      if(!isObj(en) || typeof en.exerciseId!=="string"){ repairedCount++; return; }
+      if(!Array.isArray(en.sets)){ en.sets = []; repairedCount++; }
+      if(en.warmup!==undefined && en.warmup!==true) delete en.warmup;
+      if(!isObj(en.target)){
+        var ex = null;
+        for(var i=0;i<exercises.length;i++) if(exercises[i].id===en.exerciseId){ ex = exercises[i]; break; }
+        en.target = (ex && ex.cat==="Cardio") ? {duration:20, speed:10, distance:3, rest:90} : {sets:3, reps:8, weight:20, rest:90};
+        repairedCount++;
+      }
+      kept.push(en);
+    });
+    return kept;
+  }
+  function repairState(s){
+    if(!isObj(s)) return null;
+    if(!Array.isArray(s.exercises)){
+      repairedCount++;
+      s.exercises = JSON.parse(JSON.stringify(DEFAULT_EXERCISES));
+    }
+    s.exercises = s.exercises.filter(function(e){
+      var ok = isObj(e) && typeof e.id==="string" && typeof e.name==="string";
+      if(!ok) repairedCount++;
+      return ok;
+    });
+    s.exercises.forEach(function(e){ if(typeof e.cat!=="string"){ e.cat = "Musculation"; repairedCount++; } });
+    s.days = arr(s.days).filter(function(d){
+      var ok = isObj(d) && typeof d.id==="string";
+      if(!ok) repairedCount++;
+      return ok;
+    });
+    s.days.forEach(function(d){
+      d.sessions = arr(d.sessions).filter(function(x){
+        var ok = isObj(x) && typeof x.id==="string";
+        if(!ok) repairedCount++;
+        return ok;
+      });
+      d.sessions.forEach(function(x){ x.entries = healEntries(x.entries, s.exercises); normalizeWarmBlock(x); });
+    });
+    DAYS.forEach(function(d){
+      if(!s.days.some(function(x){ return x.id===d.id; })) s.days.push({id:d.id, sessions:[]});
+    });
+    s.history = arr(s.history).filter(function(h){
+      var ok = isObj(h);
+      if(!ok) repairedCount++;
+      return ok;
+    });
+    s.warmups = arr(s.warmups).filter(function(w){
+      var ok = isObj(w) && typeof w.id==="string";
+      if(!ok) repairedCount++;
+      return ok;
+    });
+    s.warmups.forEach(function(w){
+      if(typeof w.name!=="string") w.name = "Échauffement";
+      w.entries = healEntries(w.entries, s.exercises);
+    });
+    if(!isObj(s.settings)) s.settings = {};
+    if(!isObj(s.settings.warmupDefaultByDay)) s.settings.warmupDefaultByDay = {};
+    if(typeof s.settings.defaultRestSeconds!=="number") s.settings.defaultRestSeconds = 90;
+    if(typeof s.settings.devMode!=="boolean") s.settings.devMode = false;
+    if(!isObj(s.settings.weeklyGoals)) s.settings.weeklyGoals = JSON.parse(JSON.stringify(DEFAULT_GOALS));
+    return s;
+  }
+  // Stockage : le quota est par origine (tous les projets de polthermann.github.io le partagent).
+  function measureOtherKeys(){
+    var n = 0;
+    try{
+      for(var i=0;i<localStorage.length;i++){
+        var k = localStorage.key(i);
+        if(k===STORAGE_KEY) continue;
+        n += k.length + (localStorage.getItem(k) || "").length;
+      }
+    }catch(e){}
+    return n;
+  }
+  function storageInfo(){
+    var used = stateChars + otherChars;
+    return {used:used, ratio:used/STORAGE_BUDGET_CHARS};
+  }
+  function fmtBytes(chars){
+    var b = chars*2;
+    return b>=1048576 ? (b/1048576).toFixed(1).replace(".",",")+" Mo" : Math.round(b/1024)+" Ko";
+  }
+  function storageDue(){
+    var s = state.settings;
+    if(storageInfo().ratio < STORAGE_WARN_RATIO) return false;
+    return !(s.storageSnoozeUntil && Date.now() < s.storageSnoozeUntil);
+  }
+  function hasCorruptCopy(){ try{ return localStorage.getItem(CORRUPT_KEY)!==null; }catch(e){ return false; } }
   function save(){
     try{
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      var json = JSON.stringify(state);
+      localStorage.setItem(STORAGE_KEY, json);
+      stateChars = json.length;
       return true;
     }catch(e){
       showToast("Sauvegarde impossible — stockage plein ou indisponible", true);
       return false;
     }
   }
-  function exportData(){
-    var json = JSON.stringify(state, null, 2);
-    var stamp = new Date().toISOString().slice(0,10);
-    var filename = "fonte-sauvegarde-"+stamp+".json";
+  function dateStamp(){ return new Date().toISOString().slice(0,10); }
+  // Partage (iOS : feuille de partage, sinon téléchargement). Seulement `files` : un `title` crée un fichier parasite sur iOS.
+  function shareJSON(filename, json, onDone){
     var file = new File([json], filename, {type:"application/json"});
     if(navigator.share && navigator.canShare && navigator.canShare({files:[file]})){
-      navigator.share({files:[file]}).then(markExported).catch(function(){});
+      navigator.share({files:[file]}).then(onDone).catch(function(){});
     } else {
       var url = URL.createObjectURL(new Blob([json], {type:"application/json"}));
       var a = document.createElement("a");
       a.href = url; a.download = filename;
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       setTimeout(function(){ URL.revokeObjectURL(url); }, 2000);
-      markExported();
+      onDone();
     }
+  }
+  function exportData(){
+    shareJSON("fonte-sauvegarde-"+dateStamp()+".json", JSON.stringify(state, null, 2), markExported);
+  }
+  // Export des fiches techniques : même format que app/guide-technique.json ({nom: consignes}),
+  // réimportable tel quel (Paramètres → Importer les fiches). Seuls les exercices qui ont une fiche sont exportés.
+  function buildHowToExport(){
+    var out = {};
+    state.exercises.forEach(function(ex){
+      if(typeof ex.howTo==="string" && ex.howTo.trim()) out[ex.name] = ex.howTo;
+    });
+    return out;
+  }
+  // Export des modèles d'échauffement : même format que app/warmups-import.json, réimportable tel quel.
+  function buildWarmupsExport(){
+    return state.warmups.map(function(w){
+      var exs = [];
+      w.entries.forEach(function(e){
+        var ex = getExercise(e.exerciseId);
+        if(!ex) return;
+        var spec = {name:ex.name, cat:ex.cat};
+        if(ex.muscle) spec.muscle = ex.muscle;
+        if(ex.howTo) spec.howTo = ex.howTo;
+        if(ex.bodyweight!==undefined) spec.bodyweight = ex.bodyweight;
+        if(ex.perHand!==undefined) spec.perHand = ex.perHand;
+        spec.target = JSON.parse(JSON.stringify(e.target || {}));
+        exs.push(spec);
+      });
+      return {name:w.name, exercises:exs};
+    });
+  }
+  function exportHowTo(){
+    var data = buildHowToExport();
+    var n = Object.keys(data).length;
+    if(!n){ showToast("Aucune fiche technique à exporter", true); return; }
+    shareJSON("fonte-fiches-techniques-"+dateStamp()+".json", JSON.stringify(data, null, 2),
+      function(){ showToast(n+" fiche"+(n>1?"s":"")+" exportée"+(n>1?"s":"")); });
+  }
+  function exportWarmups(){
+    var data = buildWarmupsExport();
+    var n = data.length;
+    if(!n){ showToast("Aucun modèle d’échauffement à exporter", true); return; }
+    shareJSON("fonte-modeles-echauffement-"+dateStamp()+".json", JSON.stringify(data, null, 2),
+      function(){ showToast(n+" modèle"+(n>1?"s":"")+" exporté"+(n>1?"s":"")); });
+  }
+  function exportCorruptCopy(){
+    var raw = null;
+    try{ raw = localStorage.getItem(CORRUPT_KEY); }catch(e){}
+    if(raw===null){ showToast("Aucune copie à exporter", true); return; }
+    shareJSON("fonte-donnees-illisibles-"+dateStamp()+".json", raw, function(){ showToast("Copie exportée"); });
   }
 
   var DEFAULT_GOALS = {"Pectoraux":12, "Dos":14, "Épaules":10, "Bras":12, "Jambes":14, "Fessiers":8, "Abdominaux":8, "Mollets":6, "Cardio":0};
   var state = load();
-  if(!Array.isArray(state.warmups)) state.warmups = [];
-  if(!state.settings || typeof state.settings!=="object") state.settings = {};
-  if(!state.settings.warmupDefaultByDay || typeof state.settings.warmupDefaultByDay!=="object") state.settings.warmupDefaultByDay = {};
-  if(typeof state.settings.defaultRestSeconds!=="number") state.settings.defaultRestSeconds = 90;
-  if(typeof state.settings.devMode!=="boolean") state.settings.devMode = false;
-  if(!state.settings.weeklyGoals || typeof state.settings.weeklyGoals!=="object") state.settings.weeklyGoals = JSON.parse(JSON.stringify(DEFAULT_GOALS));
+  state = repairState(state);
+  if(!state){ state = defaultState(); repairedCount = 0; repairState(state); }
+  otherChars = measureOtherKeys();
+  if(state.settings.warmupIntegrated!==true){
+    state.settings.warmupIntegrated = true;
+    if(state.warmups.length>0 && !loadNotice){
+      loadNotice = {title:"Échauffement intégré aux séances", text:"Plus de sélecteur au lancement : l’échauffement fait maintenant partie de la séance (en vert). Ajoute-le depuis chaque séance (🔥), ou applique ton échauffement par défaut à toutes tes séances dans Paramètres → Échauffement."};
+    }
+    save();
+  }
+  if(repairedCount>0){
+    if(!loadNotice) loadNotice = {title:"Données réparées", text:"Des éléments incomplets ont été corrigés ou retirés ("+repairedCount+"). Vérifie tes séances et pense à exporter une sauvegarde."};
+    save();
+  }
+
   var ui = { tab:"seance", activeDay:null, activeSession:null, newSessionForm:false, openExercise:null, historyDetail:null, draft:{}, exerciseQuery:"", linkFrom:null, editingExercise:null, openMenu:null, guided:null, editingWarmupId:null, newWarmupForm:false, exercisePickerFor:null, warmupPicker:null, scrollToEditEx:false, histPeriod:"3m", diag:"", ballast:{}, histMetric:"vol" };
   var guidedTimer = null;
+  var runClockTimer = null;   // chrono TOTAL de la séance complète (échauffement + séance), indépendant des repos/séries
 
   var DEFAULT_TARGET = {sets:3, reps:8, weight:20, rest:90};
   var DEFAULT_TARGET_CARDIO = {duration:20, speed:10, distance:3, rest:90};
@@ -792,10 +984,90 @@
     if(isBodyweight(ex) && !ex.lastTarget) target.weight = 0;
     return {exerciseId:exId, target:target, note:"", sets:[]};
   }
+  // ── Échauffement intégré à la séance ─────────────────────────────────────────
+  // Une entrée de séance marquée `warmup:true` est un exercice d'échauffement : même moteur
+  // guidé que les autres exercices, mais JAMAIS écrit dans l'historique (ni records, ni volume,
+  // ni « dernière charge »). Ces entrées sont toujours regroupées EN TÊTE de la séance.
+  function isWarmEntry(e){ return !!(e && e.warmup===true); }
+  function warmCount(session){
+    var n = 0;
+    for(var i=0;i<session.entries.length;i++){ if(isWarmEntry(session.entries[i])) n++; else break; }
+    return n;
+  }
+  function normalizeWarmBlock(session){
+    var w = [], s = [];
+    session.entries.forEach(function(e){ (isWarmEntry(e) ? w : s).push(e); });
+    session.entries = w.concat(s);
+  }
+  function insertWarmEntry(session, entry){      // à la fin du bloc d'échauffement
+    entry.warmup = true;
+    session.entries.splice(warmCount(session), 0, entry);
+  }
+  // Copie les exercices d'un modèle dans la séance (copie indépendante : modifier le modèle ensuite n'y change rien).
+  function insertWarmupModel(sessionId, warmupId){
+    var loc = findSession(sessionId), w = findWarmup(warmupId);
+    var res = {added:0, skipped:0};
+    if(!loc || !w) return res;
+    w.entries.forEach(function(me){
+      if(!getExercise(me.exerciseId)) return;
+      if(entryFor(loc.session, me.exerciseId)){ res.skipped++; return; }   // un exercice ne peut figurer qu'une fois par séance
+      insertWarmEntry(loc.session, {exerciseId:me.exerciseId, target:JSON.parse(JSON.stringify(me.target || {})), note:"", sets:[]});
+      res.added++;
+    });
+    return res;
+  }
+  // Le bouton bascule : exercice standard ⇄ échauffement.
+  function toggleWarmup(sessionId, exId){
+    var loc = findSession(sessionId);
+    if(!loc) return;
+    var session = loc.session, e = entryFor(session, exId);
+    if(!e) return;
+    var arrE = session.entries;
+    arrE.splice(arrE.indexOf(e), 1);
+    e.sets = [];     // les séries affichées sont celles du jour (comme au lancement guidé) ; l'historique, lui, n'est jamais touché
+    if(isWarmEntry(e)){
+      delete e.warmup;
+      if(e.target){ delete e.target.mode; delete e.target.seconds; }
+      arrE.splice(warmCount(session), 0, e);        // 1er du bloc « séance »
+    } else {
+      var gid = e.supersetId;
+      e.supersetId = null;
+      if(gid){
+        var left = arrE.filter(function(x){ return x.supersetId===gid; });
+        if(left.length<2) left.forEach(function(x){ x.supersetId = null; });
+      }
+      e.warmup = true;
+      arrE.splice(warmCount(session), 0, e);        // fin du bloc d'échauffement
+    }
+    save(); render();
+  }
+  // Applique l'échauffement par défaut de chaque jour aux séances EXISTANTES qui n'en ont pas (action explicite).
+  function applyWarmDefaultsToSessions(){
+    var plan = [];
+    state.days.forEach(function(d){
+      var defId = state.settings.warmupDefaultByDay[d.id];
+      if(!defId || !findWarmup(defId)) return;
+      d.sessions.forEach(function(s){ if(warmCount(s)===0) plan.push({sid:s.id, wid:defId}); });
+    });
+    if(!plan.length){ showToast("Aucune séance sans échauffement à compléter", true); return; }
+    if(!window.confirm("Ajouter l’échauffement par défaut du jour à "+plan.length+" séance"+(plan.length>1?"s":"")+" qui n’en ont pas encore ?")) return;
+    var n = 0;
+    plan.forEach(function(p){ if(insertWarmupModel(p.sid, p.wid).added) n++; });
+    save(); render();
+    showToast("Échauffement ajouté à "+n+" séance"+(n>1?"s":""));
+  }
+  function clearWarmDrafts(session){
+    if(!session) return;
+    session.entries.forEach(function(e){ if(isWarmEntry(e)) delete ui.draft[e.exerciseId]; });
+  }
+  var WARM_TARGET = {sets:2, reps:15, weight:0, rest:30};
   function createSessionInDay(dayId, name){
     var day = getDay(dayId);
     var s = {id:uid(), name:name||"", entries:[]};
     day.sessions.push(s);
+    // L'échauffement par défaut du jour (Paramètres) est intégré d'office aux NOUVELLES séances.
+    var defId = state.settings.warmupDefaultByDay && state.settings.warmupDefaultByDay[dayId];
+    if(defId && findWarmup(defId)) insertWarmupModel(s.id, defId);
     save();
     return s;
   }
@@ -812,7 +1084,16 @@
   function addExerciseToSession(sessionId, exId){
     var loc = findSession(sessionId);
     if(!loc) return;
-    if(!entryFor(loc.session, exId)) loc.session.entries.push(makeEntry(exId));
+    if(!entryFor(loc.session, exId)){
+      var ne = makeEntry(exId), exN = getExercise(exId);
+      // Un exercice de catégorie « Échauffement » arrive d'office dans le bloc d'échauffement (vert).
+      if(exN && exN.cat==="Échauffement"){
+        if(!isCardio(exN) && !exN.lastTarget) ne.target = JSON.parse(JSON.stringify(WARM_TARGET));
+        insertWarmEntry(loc.session, ne);
+      } else {
+        loc.session.entries.push(ne);
+      }
+    }
     save();
     ui.tab = "seance"; ui.activeDay = loc.day.id; ui.activeSession = sessionId; ui.openExercise = exId;
     render();
@@ -887,13 +1168,9 @@
     if(prop==="mode" && value==="timed" && !e.target.seconds) e.target.seconds = 30;
     save(); render();
   }
-  // Une série d'échauffement se compte pour faire avancer la jauge du mode guidé,
-  // mais ne touche jamais à l'historique/aux stats (choix explicite de l'utilisateur).
-  function addWarmupSet(warmupId, exId){
-    var w = findWarmup(warmupId);
-    if(!w) return;
-    var e = entryFor(w, exId);
-    if(!e){ e = makeEntry(exId); w.entries.push(e); }
+  // Une série d'échauffement fait avancer la jauge du mode guidé, mais ne touche jamais à
+  // l'historique ni aux stats (choix explicite de l'utilisateur).
+  function pushWarmSet(e, exId){
     var d = draftFor(exId);
     var ex = getExercise(exId);
     var setId = uid();
@@ -904,21 +1181,17 @@
     else e.sets.push({id:setId, weight:d.weight, reps:d.reps, pr:false});
     save(); render();
   }
-  function deleteWarmupSet(warmupId, exId, setId){
-    var w = findWarmup(warmupId);
-    if(!w) return;
-    var e = entryFor(w, exId);
-    if(!e) return;
-    e.sets = e.sets.filter(function(st){ return st.id!==setId; });
-    save(); render();
-  }
-  // Source d'entrées pour le moteur du mode guidé, qu'il s'agisse d'une vraie
-  // séance ou d'un modèle d'échauffement — même forme ({id, entries}) des deux côtés.
+  // Source d'entrées du mode guidé : toujours la séance (échauffement compris).
   function guidedSource(){
     if(!ui.guided) return null;
-    if(ui.guided.isWarmup) return findWarmup(ui.guided.sessionId);
     var loc = findSession(ui.guided.sessionId);
     return loc ? loc.session : null;
+  }
+  // Vrai si l'exercice EN COURS du mode guidé est un exercice d'échauffement.
+  function gW(){
+    if(!ui.guided) return false;
+    var s = guidedSource();
+    return !!(s && isWarmEntry(s.entries[ui.guided.entryIndex]));
   }
   function bestAllTime(exId){
     var ex = getExercise(exId);
@@ -962,6 +1235,7 @@
     var session = loc.session;
     var e = entryFor(session, exId);
     if(!e){ e = makeEntry(exId); session.entries.push(e); }
+    if(isWarmEntry(e)){ pushWarmSet(e, exId); return; }
     var d = draftFor(exId);
     var ex = getExercise(exId);
     var prevBest = bestAllTime(exId);
@@ -1013,6 +1287,15 @@
     var e = entryFor(loc.session, exId);
     if(!e) return;
     var ex = getExercise(exId);
+    if(isWarmEntry(e)){
+      // Cible d'échauffement : on n'alimente PAS lastTarget (mémoire des objectifs « normaux »).
+      if(!e.target) e.target = isCardio(ex) ? {duration:5, speed:5, distance:0.5, rest:30} : JSON.parse(JSON.stringify(WARM_TARGET));
+      if(e.target.rest===undefined) e.target.rest = 30;
+      e.target[prop] = value;
+      if(prop==="mode" && value==="timed" && !e.target.seconds) e.target.seconds = 30;
+      save(); render();
+      return;
+    }
     if(isCardio(ex)){
       if(!e.target) e.target = {duration:DEFAULT_TARGET_CARDIO.duration, speed:DEFAULT_TARGET_CARDIO.speed, distance:DEFAULT_TARGET_CARDIO.distance, rest:DEFAULT_TARGET_CARDIO.rest};
       if(e.target.rest===undefined) e.target.rest = DEFAULT_TARGET_CARDIO.rest;
@@ -1090,6 +1373,8 @@
         var ex = findExerciseByName(exSpec.name);
         if(!ex){
           ex = {id:uid(), name:exSpec.name, cat:exSpec.cat||"Échauffement", muscle:exSpec.muscle||"Cardio"};
+          if(exSpec.bodyweight!==undefined) ex.bodyweight = !!exSpec.bodyweight;
+          if(exSpec.perHand!==undefined) ex.perHand = !!exSpec.perHand;
           state.exercises.push(ex);
         }
         if(exSpec.howTo){ ex.howTo = exSpec.howTo; }
@@ -1118,12 +1403,12 @@
     ui.activeSession = null;
     save(); render();
   }
-  function showToast(msg, isError){
+  function showToast(msg, isError, ms){
     var t = document.getElementById("prToast");
     t.textContent = msg;
     t.classList.toggle("error", !!isError);
     t.classList.add("show");
-    setTimeout(function(){ t.classList.remove("show"); }, isError ? 3000 : 1400);
+    setTimeout(function(){ t.classList.remove("show"); }, ms || (isError ? 3000 : 1400));
   }
   function showPR(){ showToast("Nouveau record"); }
   var undoFn = null, undoTimer = null;
@@ -1164,7 +1449,7 @@
       if(p && p.catch) p.catch(function(){ realBeepPlaying = false; });
     }catch(err){}
   }
-  function startGuided(sessionId){
+  function startGuided(sessionId, runStartedAt){
     var loc = findSession(sessionId);
     if(!loc || loc.session.entries.length===0) return;
     // Remise à zéro automatique des séries affichées (l'historique, lui, est conservé).
@@ -1181,30 +1466,11 @@
     clearInterval(guidedTimer); guidedTimer = null;
     unlockGuidedAudio();
     requestWakeLock();
-    ui.guided = {sessionId:sessionId, isWarmup:false, chainSessionId:null, entryIndex:0, setNumber:1, phase:"log", restEndsAt:null, startedAt:Date.now(), setsLogged:0, setsSkipped:0, setStartedAt:Date.now(), showHowTo:false, showQuitChoice:false, timedEndsAt:null, seededKey:null};
+    ui.guided = {sessionId:sessionId, entryIndex:0, setNumber:1, phase:"log", restEndsAt:null, startedAt:Date.now(), runStartedAt:(runStartedAt || Date.now()), setsLogged:0, setsSkipped:0, warmLogged:0, warmSkipped:0, setStartedAt:Date.now(), showHowTo:false, showQuitChoice:false, timedEndsAt:null, seededKey:null};
     ui.tab = "seance"; ui.activeSession = sessionId;
     render();
     startSetStopwatch();
-  }
-  // Lance un modèle d'échauffement en mode guidé ; une fois terminé (ou entièrement
-  // passé), enchaîne automatiquement sur la vraie séance sans écran intermédiaire.
-  function startGuidedWarmup(warmupId, chainSessionId){
-    var w = findWarmup(warmupId);
-    if(!w || w.entries.length===0){ startGuided(chainSessionId); return; }
-    w.entries.forEach(function(e){ e.sets = []; });
-    save();
-    clearInterval(guidedTimer); guidedTimer = null;
-    unlockGuidedAudio();
-    requestWakeLock();
-    ui.guided = {sessionId:warmupId, isWarmup:true, chainSessionId:chainSessionId, entryIndex:0, setNumber:1, phase:"log", restEndsAt:null, startedAt:Date.now(), setsLogged:0, setsSkipped:0, setStartedAt:Date.now(), showHowTo:false, showQuitChoice:false, timedEndsAt:null, seededKey:null};
-    ui.tab = "seance"; ui.activeSession = chainSessionId;
-    render();
-    startSetStopwatch();
-  }
-  function launchSessionWithWarmupPicker(sessionId, dayId){
-    if(!state.warmups.length){ startGuided(sessionId); return; }
-    ui.warmupPicker = {sessionId:sessionId, dayId:dayId};
-    render();
+    startRunClock();
   }
   function unlockGuidedAudio(){
     try{
@@ -1264,7 +1530,7 @@
     }
     var srcT = guidedSource();
     var enT = srcT && srcT.entries[ui.guided.entryIndex];
-    if(ui.guided.isWarmup && (entryMode(enT)==="timed" || entryMode(enT)==="done")) return;
+    if(isWarmEntry(enT) && (entryMode(enT)==="timed" || entryMode(enT)==="done")) return;
     if(el) el.textContent = formatTime((Date.now()-ui.guided.setStartedAt)/1000);
   }
   function guidedStartTimer(){
@@ -1283,15 +1549,16 @@
     clearInterval(guidedTimer); guidedTimer = null;
     clearInterval(setStopwatchTimer); setStopwatchTimer = null;
     releaseWakeLock();
+    stopRunClock();
     ui.guided = null;
     render();
   }
-  // Bouton "Quitter" pendant une séance : confirmation classique.
-  // Pendant un échauffement : deux issues bien différentes (sauter à la séance,
-  // ou tout abandonner), donc un petit choix dédié plutôt qu'un confirm() à 2 options.
+  // Bouton « Quitter » : pendant l'échauffement, deux issues très différentes (sauter le bloc
+  // d'échauffement et passer aux exercices, ou tout abandonner) → petit choix dédié ;
+  // pendant la séance : confirmation classique.
   function guidedQuitRequest(){
     if(!ui.guided) return;
-    if(ui.guided.isWarmup){
+    if(gW()){
       ui.guided.showQuitChoice = true;
       render();
       return;
@@ -1303,36 +1570,49 @@
     ui.guided.showQuitChoice = false;
     render();
   }
+  // « Passer à la séance » : saute ce qui reste du bloc d'échauffement (compté comme « passé »).
   function warmupQuitSkipToSession(){
     if(!ui.guided) return;
-    var chainId = ui.guided.chainSessionId;
+    var session = guidedSource();
+    if(!session) return;
+    var n = warmCount(session), remaining = 0;
+    for(var i=ui.guided.entryIndex;i<n;i++){
+      var en = session.entries[i], exq = getExercise(en.exerciseId);
+      if(!exq) continue;
+      var tot = isCardio(exq) ? 1 : ((en.target && en.target.sets) || 1);
+      remaining += (i===ui.guided.entryIndex) ? Math.max(0, tot-(ui.guided.setNumber-1)) : tot;
+    }
+    ui.guided.warmSkipped += remaining;
     clearInterval(guidedTimer); guidedTimer=null;
     clearInterval(setStopwatchTimer); setStopwatchTimer=null;
-    clearWarmupDrafts(guidedSource());
-    startGuided(chainId);
+    clearWarmDrafts(session);
+    ui.guided.timedEndsAt = null;
+    ui.guided.showQuitChoice = false;
+    ui.guided.entryIndex = n;
+    ui.guided.setNumber = 1;
+    ui.guided.phase = "log";
+    ui.guided.setStartedAt = Date.now();
+    if(n>=session.entries.length){ finishGuidedRun(); return; }
+    render();
+    startSetStopwatch();
   }
   function warmupQuitAbandonAll(){
     if(!ui.guided) return;
-    clearWarmupDrafts(guidedSource());
+    clearWarmDrafts(guidedSource());
     clearInterval(guidedTimer); guidedTimer=null;
     clearInterval(setStopwatchTimer); setStopwatchTimer=null;
     releaseWakeLock();
+    stopRunClock();
     ui.guided = null;
     render();
   }
-  // Fin naturelle d'un enchaînement guidé : pour une vraie séance, écran de résumé
-  // classique ; pour un échauffement, on enchaîne directement sur la séance, sans
-  // écran intermédiaire.
+  // Fin naturelle de l'enchaînement guidé : écran de résumé.
   function finishGuidedRun(){
     clearInterval(guidedTimer); guidedTimer=null;
     clearInterval(setStopwatchTimer); setStopwatchTimer=null;
-    if(ui.guided.isWarmup){
-      clearWarmupDrafts(guidedSource());
-      startGuided(ui.guided.chainSessionId);
-    } else {
-      ui.guided.phase = "done";
-      render();
-    }
+    clearWarmDrafts(guidedSource());
+    ui.guided.phase = "done";
+    render();
   }
   function guidedGoRest(target){
     clearInterval(setStopwatchTimer); setStopwatchTimer = null;
@@ -1375,9 +1655,8 @@
     if(!entry){ ui.guided.phase="done"; render(); return; }
     var ex = getExercise(entry.exerciseId);
     if(!ex){ ui.guided.entryIndex++; ui.guided.setNumber=1; render(); return; }
-    if(ui.guided.isWarmup) addWarmupSet(ui.guided.sessionId, entry.exerciseId);
-    else addSet(ui.guided.sessionId, entry.exerciseId);
-    ui.guided.setsLogged++;
+    addSet(ui.guided.sessionId, entry.exerciseId);
+    if(isWarmEntry(entry)) ui.guided.warmLogged++; else ui.guided.setsLogged++;
     var target = entry.target || {};
     var totalSets = isCardio(ex) ? 1 : (target.sets || 1);
     var isLastSetOfExercise = ui.guided.setNumber >= totalSets;
@@ -1389,6 +1668,16 @@
     if(isLastSetOfExercise){
       ui.guided.entryIndex++;
       ui.guided.setNumber = 1;
+      // Fin du bloc d'échauffement : on enchaîne directement sur le 1er exercice, sans repos.
+      var nextAfter = session.entries[ui.guided.entryIndex];
+      if(isWarmEntry(entry) && nextAfter && !isWarmEntry(nextAfter)){
+        clearWarmDrafts(session);
+        ui.guided.phase = "log";
+        ui.guided.setStartedAt = Date.now();
+        render();
+        startSetStopwatch();
+        return;
+      }
     } else {
       ui.guided.setNumber++;
     }
@@ -1414,7 +1703,8 @@
       var curEx = curEntry && getExercise(curEntry.exerciseId);
       if(curEx){
         var curTotalSets = isCardio(curEx) ? 1 : ((curEntry.target && curEntry.target.sets) || 1);
-        ui.guided.setsSkipped += Math.max(0, curTotalSets - (ui.guided.setNumber - 1));
+        var skipN = Math.max(0, curTotalSets - (ui.guided.setNumber - 1));
+        if(isWarmEntry(curEntry)) ui.guided.warmSkipped += skipN; else ui.guided.setsSkipped += skipN;
       }
     }
     ui.guided.entryIndex++;
@@ -1448,9 +1738,9 @@
     var entry = session.entries[ui.guided.entryIndex];
     if(entry && entry.sets.length){
       var lastSet = entry.sets[entry.sets.length-1];
-      if(ui.guided.isWarmup) deleteWarmupSet(ui.guided.sessionId, entry.exerciseId, lastSet.id);
-      else deleteSet(ui.guided.sessionId, entry.exerciseId, lastSet.id, true);
-      ui.guided.setsLogged = Math.max(0, ui.guided.setsLogged-1);
+      deleteSet(ui.guided.sessionId, entry.exerciseId, lastSet.id, true);
+      if(isWarmEntry(entry)) ui.guided.warmLogged = Math.max(0, ui.guided.warmLogged-1);
+      else ui.guided.setsLogged = Math.max(0, ui.guided.setsLogged-1);
     }
     ui.guided.phase = "log";
     ui.guided.setStartedAt = Date.now();
@@ -1512,6 +1802,7 @@
     if(idx<0) return;
     var newIdx = idx + dir;
     if(newIdx<0 || newIdx>=arr.length) return;
+    if(isWarmEntry(arr[idx]) !== isWarmEntry(arr[newIdx])) return;   // le bloc d'échauffement reste en tête
     var tmp = arr[idx]; arr[idx] = arr[newIdx]; arr[newIdx] = tmp;
     save(); render();
   }
@@ -1556,6 +1847,7 @@
     if(!e){ e = makeEntry(exId); session.entries.push(e); }
     if(!e.target){ e.target = cardio ? {duration:DEFAULT_TARGET_CARDIO.duration, speed:DEFAULT_TARGET_CARDIO.speed, distance:DEFAULT_TARGET_CARDIO.distance} : {sets:DEFAULT_TARGET.sets, reps:DEFAULT_TARGET.reps, weight:DEFAULT_TARGET.weight}; }
     if(e.note===undefined) e.note = "";
+    if(isWarmEntry(e)) return renderWarmCard(session, e, ex);
     var target = e.target;
     var sets = e.sets;
     var open = ui.openExercise === exId;
@@ -1590,13 +1882,15 @@
       '<span class="chevron" aria-hidden="true">'+ICON.chevron+'</span></span></div>';
     if(menuOpen){
       var linking = ui.linkFrom && ui.linkFrom.session===session.id && ui.linkFrom.ex===exId;
+      var idxS = session.entries.indexOf(e), prevIsWarm = idxS>0 && isWarmEntry(session.entries[idxS-1]);
       var linkAction, linkLabel;
       if(e.supersetId){ linkAction="unlink"; linkLabel="✕ Délier le superset"; }
       else if(linking){ linkAction="linktoggle"; linkLabel="✕ Annuler la liaison"; }
       else { linkAction="linktoggle"; linkLabel="🔗 Lier en superset"; }
       html += '<div class="card-menu">'+
-        '<button data-action="moveex" data-session="'+session.id+'" data-ex="'+exId+'" data-dir="-1">↑ Monter</button>'+
+        (prevIsWarm ? '' : '<button data-action="moveex" data-session="'+session.id+'" data-ex="'+exId+'" data-dir="-1">↑ Monter</button>')+
         '<button data-action="moveex" data-session="'+session.id+'" data-ex="'+exId+'" data-dir="1">↓ Descendre</button>'+
+        '<button data-action="togglewarm" data-session="'+session.id+'" data-ex="'+exId+'">🔥 Passer en échauffement</button>'+
         '<button data-action="'+linkAction+'" data-session="'+session.id+'" data-ex="'+exId+'">'+linkLabel+'</button>'+
         '<button data-action="editexfromseance" data-ex="'+exId+'">'+ICON.edit+' Modifier l’exercice</button>'+
         '<button class="danger" data-action="removeex" data-session="'+session.id+'" data-ex="'+exId+'">'+ICON.trash+' Retirer de la séance</button>'+
@@ -1681,10 +1975,6 @@
     var m = entry && entry.target && entry.target.mode;
     return (m==="reps" || m==="timed" || m==="done") ? m : "load";
   }
-  function clearWarmupDrafts(session){
-    if(!session) return;
-    session.entries.forEach(function(e){ delete ui.draft[e.exerciseId]; });
-  }
   // Résumé daté des séries affichées (dates retrouvées via l'historique, sans rien stocker de plus).
   function setsStamp(sets){
     if(!sets.length) return "";
@@ -1756,7 +2046,7 @@
     var rows = [], totalKg = 0, records = 0;
     entries.forEach(function(e){
       var exx = getExercise(e.exerciseId);
-      if(!exx || !e.sets.length) return;
+      if(isWarmEntry(e) || !exx || !e.sets.length) return;
       var cardioX = isCardio(exx), bw = isBodyweight(exx);
       var pts = volumePoints(e.exerciseId);
       var today = null, prev = null;
@@ -1782,6 +2072,15 @@
   }
   function renderDayList(){
     var html = '';
+    if(loadNotice){
+      html += '<div class="backup-banner"><div class="bb-text"><b>'+esc(loadNotice.title)+'</b><span>'+esc(loadNotice.text)+'</span></div>'+
+        '<div class="bb-actions"><button data-action="dismissnotice">OK</button></div></div>';
+    }
+    if(storageDue()){
+      var si = storageInfo(), pct = Math.min(100, Math.round(si.ratio*100));
+      html += '<div class="backup-banner"><div class="bb-text"><b>'+(si.ratio>=0.95 ? 'Stockage presque plein' : 'Stockage bientôt plein')+'</b><span>'+pct+' % utilisé ('+fmtBytes(si.used)+'). Exporte tes données : au-delà, l’enregistrement peut échouer.</span></div>'+
+        '<div class="bb-actions"><button data-action="exportdata">Exporter</button><button class="ghost" data-action="snoozestorage">Plus tard</button></div></div>';
+    }
     if(backupDue()){
       html += '<div class="backup-banner"><div class="bb-text"><b>Pense à sauvegarder tes données</b><span>Dernier export : '+exportAgeText()+'</span></div>'+
         '<div class="bb-actions"><button data-action="exportdata">Exporter</button><button class="ghost" data-action="snoozebackup">Plus tard</button></div></div>';
@@ -1817,10 +2116,11 @@
       html += '<div class="empty">Aucune séance ce jour pour l’instant.</div>';
     } else {
       day.sessions.forEach(function(s){
-        var setCount = 0; s.entries.forEach(function(e){ setCount += e.sets.length; });
+        var nWarm = warmCount(s), nStd = s.entries.length - nWarm, setCount = 0;
+        s.entries.forEach(function(e){ if(!isWarmEntry(e)) setCount += e.sets.length; });
         html += '<div class="session-row-card" data-action="opensession" data-id="'+s.id+'">'+
           '<div><div class="srDate">'+esc(s.name||"Séance sans nom")+'</div>'+
-          '<div class="srMeta">'+s.entries.length+' exercice'+(s.entries.length>1?'s':'')+' · '+setCount+' série'+(setCount>1?'s':'')+'</div></div>'+
+          '<div class="srMeta">'+nStd+' exercice'+(nStd>1?'s':'')+' · '+setCount+' série'+(setCount>1?'s':'')+(nWarm ? ' · 🔥 échauffement ('+nWarm+')' : '')+'</div></div>'+
           '<span class="srArrow">›</span></div>';
       });
     }
@@ -1834,12 +2134,19 @@
     if(ui.linkFrom && ui.linkFrom.session===session.id){
       html += '<div class="link-hint">Ouvre le menu ⋮ de l’exercice à lier, puis « Lier en superset » — <a data-action="cancellink">annuler</a></div>';
     }
+    var nWarm = warmCount(session);
     if(session.entries.length===0){
       html += '<div class="empty">Aucun exercice pour l’instant.<br>Ajoute un exercice depuis l’onglet Exercices.</div>';
     } else {
       html += '<button class="guided-start-btn" data-action="startguided" data-session="'+session.id+'" data-day="'+day.id+'">▶ Lancer la séance</button>';
-      session.entries.forEach(function(e){ html += renderExerciseCard(session, e.exerciseId); });
     }
+    if(nWarm>0){
+      html += '<div class="warm-section-title">🔥 Échauffement</div>';
+      session.entries.slice(0, nWarm).forEach(function(e){ html += renderExerciseCard(session, e.exerciseId); });
+    }
+    html += '<button class="warm-add-btn" data-action="addwarm" data-session="'+session.id+'">🔥 Ajouter un échauffement</button>';
+    if(nWarm>0 && session.entries.length>nWarm) html += '<div class="warm-section-title std">Séance</div>';
+    session.entries.slice(nWarm).forEach(function(e){ html += renderExerciseCard(session, e.exerciseId); });
     html += '<button class="cta-btn" data-action="goto-exercices">+ Ajouter un exercice</button>';
     var anySets = session.entries.some(function(e){ return e.sets.length>0; });
     if(anySets) html += '<button class="reset-btn" data-action="resetsession" data-session="'+session.id+'">Réinitialiser les séries de cette séance</button>';
@@ -1847,23 +2154,73 @@
     return html;
   }
 
-  function sessionTotalSets(session){
+  // Carte d'un exercice d'ÉCHAUFFEMENT dans la séance (verte) : réglages du bloc, bouton bascule dans le menu ⋮.
+  function renderWarmCard(session, e, ex){
+    var exId = e.exerciseId, sid = session.id, cardio = isCardio(ex), t = e.target || {}, mode = entryMode(e);
+    var idx = session.entries.indexOf(e), nW = warmCount(session);
+    var menuOpen = ui.openMenu === exId;
+    var base = ' data-session="'+sid+'" data-ex="'+exId+'"';
+    var h = '<div class="card exercise-card warm">';
+    h += '<div class="ex-head"><span class="ex-title"><span class="warm-tag" aria-hidden="true">🔥</span>'+esc(ex.name)+'</span>'+
+      '<span class="ex-head-right"><button class="menu-btn'+(menuOpen?' active':'')+'" data-action="togglemenu" data-ex="'+exId+'" aria-label="Options de l’exercice">⋮</button></span></div>';
+    if(menuOpen){
+      h += '<div class="card-menu">'+
+        (idx>0 ? '<button data-action="moveex"'+base+' data-dir="-1">↑ Monter</button>' : '')+
+        (idx<nW-1 ? '<button data-action="moveex"'+base+' data-dir="1">↓ Descendre</button>' : '')+
+        '<button data-action="togglewarm"'+base+'>↩ Repasser en exercice standard</button>'+
+        '<button data-action="editexfromseance" data-ex="'+exId+'">'+ICON.edit+' Modifier l’exercice</button>'+
+        '<button class="danger" data-action="removeex"'+base+'>'+ICON.trash+' Retirer de la séance</button>'+
+        '</div>';
+    }
+    h += '<div class="warm-label">Échauffement</div>';
+    if(cardio){
+      h += '<div class="objectif-row"><span class="obj-label">Objectif</span>'+
+        '<input class="obj-input" type="number" inputmode="decimal" min="0" data-role="target-duration"'+base+' value="'+(t.duration!==undefined?t.duration:5)+'" aria-label="Durée en minutes"> min ×'+
+        '<input class="obj-input" type="number" inputmode="decimal" min="0" data-role="target-speed"'+base+' value="'+(t.speed!==undefined?t.speed:5)+'" aria-label="Vitesse en km/h"> km/h</div>';
+    } else {
+      h += '<div class="rest-line">Type : <select data-role="warmsessionmode"'+base+'>'+
+        [['load','Poids + répétitions'],['reps','Répétitions seules'],['timed','Durée (compte à rebours)'],['done','Simple « fait »']].map(function(o){
+          return '<option value="'+o[0]+'"'+(mode===o[0]?' selected':'')+'>'+o[1]+'</option>';
+        }).join('')+'</select></div>';
+      var setsIn = '<input class="obj-input" type="number" inputmode="numeric" min="0" data-role="target-sets"'+base+' value="'+(t.sets!==undefined?t.sets:2)+'" aria-label="Nombre de séries"> séries';
+      if(mode==='timed'){
+        h += '<div class="objectif-row">'+setsIn+' × <input class="obj-input" type="number" inputmode="numeric" min="0" data-role="target-seconds"'+base+' value="'+(t.seconds!==undefined?t.seconds:30)+'" aria-label="Durée en secondes"> sec</div>';
+      } else if(mode==='done'){
+        h += '<div class="objectif-row">'+setsIn+'</div>';
+      } else {
+        h += '<div class="objectif-row">'+setsIn+' × <input class="obj-input" type="number" inputmode="numeric" min="0" data-role="target-reps"'+base+' value="'+(t.reps!==undefined?t.reps:15)+'" aria-label="Nombre de répétitions"> reps</div>';
+      }
+    }
+    h += '<div class="rest-line">⏱ repos <input class="rest-input-plain" type="number" inputmode="numeric" min="0" step="5" data-role="target-rest"'+base+' value="'+(t.rest!==undefined?t.rest:30)+'" aria-label="Temps de repos en secondes"> s</div>';
+    var total = cardio ? 1 : (t.sets || 1);
+    h += '<div class="warm-progress"><span>'+(e.sets.length>0 ? e.sets.length+' / '+total+' faite'+(e.sets.length>1?'s':'') : 'Pas encore fait')+'</span>'+
+      '<button class="warm-done-btn" data-action="warmdone"'+base+'>✓ Fait</button></div>';
+    h += '</div>';
+    return h;
+  }
+
+  // `warm` : true = seulement l'échauffement, false = seulement la séance, absent = tout.
+  function sessionTotalSets(session, warm){
     var total = 0;
     session.entries.forEach(function(e){
+      if(warm!==undefined && isWarmEntry(e)!==!!warm) return;
       var ex = getExercise(e.exerciseId);
       if(!ex) return;
       total += isCardio(ex) ? 1 : ((e.target && e.target.sets) || 1);
     });
     return total;
   }
+  // Deux jauges distinctes : celle de l'échauffement (verte) tant qu'on est dans le bloc, puis celle de la séance.
   function guidedProgressBarHTML(session){
-    var totalPlanned = sessionTotalSets(session);
-    var logged = ui.guided.setsLogged;
-    var accounted = logged + (ui.guided.setsSkipped||0);
+    var warm = gW();
+    var totalPlanned = sessionTotalSets(session, warm);
+    var logged = warm ? ui.guided.warmLogged : ui.guided.setsLogged;
+    var skipped = (warm ? ui.guided.warmSkipped : ui.guided.setsSkipped) || 0;
+    var accounted = logged + skipped;
     var pct = totalPlanned>0 ? Math.round(Math.min(accounted, totalPlanned)/totalPlanned*100) : 0;
     return '<div class="guided-progress-wrap">'+
       '<div class="guided-progress-bar"><div class="guided-progress-fill" style="width:'+pct+'%"></div></div>'+
-      '<div class="guided-progress-label">'+logged+'/'+totalPlanned+(ui.guided.isWarmup ? ' séries d\'échauffement' : ' séries de la séance')+((ui.guided.setsSkipped||0)>0 ? ' · '+ui.guided.setsSkipped+' passée'+(ui.guided.setsSkipped>1?'s':'') : '')+'</div>'+
+      '<div class="guided-progress-label">'+logged+'/'+totalPlanned+(warm ? ' séries d\'échauffement' : ' séries de la séance')+(skipped>0 ? ' · '+skipped+' passée'+(skipped>1?'s':'') : '')+'</div>'+
       '</div>';
   }
   function targetSummary(ex, target){
@@ -1875,9 +2232,33 @@
     return target.sets+'×'+target.reps+'×'+target.weight+'kg';
   }
 
+  // Chrono total : calculé depuis l'horodatage de départ (juste même si l'écran s'est mis en veille
+  // ou si l'app est passée en arrière-plan) ; il continue d'un bout à l'autre de l'enchaînement
+  // échauffement → séance et se fige à l'écran de fin.
+  function formatClock(sec){
+    sec = Math.max(0, Math.floor(sec));
+    var h = Math.floor(sec/3600), m = Math.floor((sec%3600)/60), s = sec%60;
+    return (h>0 ? h+":"+(m<10?"0":"")+m : m)+":"+(s<10?"0":"")+s;
+  }
+  function runElapsed(){
+    if(!ui.guided || !ui.guided.runStartedAt) return 0;
+    return ((ui.guided.runEndedAt || Date.now()) - ui.guided.runStartedAt)/1000;
+  }
+  function stopRunClock(){ clearInterval(runClockTimer); runClockTimer = null; }
+  function tickRunClock(){
+    if(!ui.guided || ui.guided.runEndedAt){ stopRunClock(); return; }
+    var el = document.getElementById("runClock");
+    if(el) el.textContent = formatClock(runElapsed());
+  }
+  function startRunClock(){
+    clearInterval(runClockTimer);
+    runClockTimer = setInterval(tickRunClock, 1000);
+  }
   function guidedTopHTML(session){
-    return '<div class="g-top">'+
-      '<span class="g-live"><i></i>'+(ui.guided.isWarmup ? 'Échauffement' : 'Séance en cours')+'</span>'+
+    var warmTop = gW();
+    return '<div class="g-top'+(warmTop?' warm':'')+'">'+
+      '<div class="g-toprow"><span class="g-live"><i></i>'+(warmTop ? '🔥 Échauffement' : 'Séance en cours')+'</span>'+
+      '<span class="g-clock" aria-label="Temps total de la séance">Total <b id="runClock">'+formatClock(runElapsed())+'</b></span></div>'+
       guidedProgressBarHTML(session)+
       '<button class="howto-btn" data-action="togglehowto">📋 Guide technique</button>'+
       '</div>';
@@ -1887,15 +2268,10 @@
     if(!session){ ui.guided=null; return renderSeance(); }
     var entries = session.entries;
 
-    if(ui.guided.isWarmup && (ui.guided.phase==="done" || ui.guided.entryIndex >= entries.length)){
-      // Filet de sécurité : finishGuidedRun() enchaîne normalement déjà sur la séance.
-      clearWarmupDrafts(session);
-      startGuided(ui.guided.chainSessionId);
-      return '<div class="guided-screen"></div>';
-    }
-
     if(ui.guided.phase==="done" || ui.guided.entryIndex >= entries.length){
-      var mins = Math.max(1, Math.round((Date.now()-ui.guided.startedAt)/60000));
+      if(!ui.guided.runEndedAt) ui.guided.runEndedAt = Date.now();
+      stopRunClock();
+      var mins = Math.max(1, Math.round(runElapsed()/60));
       var sum = sessionSummary(entries);
       var html2 = '<div class="guided-screen"><div class="g-mid guided-done">'+
         '<div class="guided-done-icon">✓</div>'+
@@ -1916,7 +2292,8 @@
     if(!ex){ ui.guided.entryIndex++; return renderGuided(); }
     var target = entry.target || {};
     var cardio = isCardio(ex);
-    var mode = ui.guided.isWarmup ? entryMode(entry) : "load";
+    var warm = isWarmEntry(entry);
+    var mode = warm ? entryMode(entry) : "load";
     var totalSets = cardio ? 1 : (target.sets||1);
     var canGoBack = ui.guided.entryIndex>0 || ui.guided.setNumber>1;
 
@@ -1941,7 +2318,7 @@
 
     // Le bouton « Annuler » réserve toujours sa place : plus aucun décalage de « Valider ».
     var undoBtn = '<button class="g-undo'+(canGoBack?'':' ghost')+'" data-action="guidedgoback"'+(canGoBack?'':' tabindex="-1" aria-hidden="true" disabled')+'>'+ICON.undo+' Annuler la dernière série</button>';
-    var noteHTML = ui.guided.isWarmup ? '' :
+    var noteHTML = warm ? '' :
       '<textarea class="note-area guided-note" rows="1" placeholder="Note sur '+esc(ex.name)+'…" data-role="note" data-session="'+session.id+'" data-ex="'+entry.exerciseId+'">'+esc(entry.note||"")+'</textarea>';
 
     if(ui.guided.phase==="rest"){
@@ -1953,10 +2330,10 @@
       } else {
         var nextEntry = entries[ui.guided.entryIndex+1];
         var nextEx = nextEntry ? getExercise(nextEntry.exerciseId) : null;
-        nextTitle = nextEx ? esc(nextEx.name) : (ui.guided.isWarmup ? 'Fin de l\'échauffement' : 'Fin de séance');
+        nextTitle = nextEx ? esc(nextEx.name) : 'Fin de séance';
         nextSub = (nextEx && nextEntry) ? targetSummary(nextEx, nextEntry.target||{}) : '';
       }
-      return '<div class="guided-screen">'+
+      return '<div class="guided-screen'+(warm?' warm':'')+'">'+
         guidedTopHTML(session)+
         '<div class="g-mid rest">'+
           '<div class="rest-label">Repos</div>'+
@@ -1977,7 +2354,7 @@
 
     // Pré-remplissage : échauffement → valeurs de l'objectif ; exercice jamais fait → objectif.
     if(!cardio){
-      if(ui.guided.isWarmup){
+      if(warm){
         var seedKey = ui.guided.entryIndex+':'+ui.guided.setNumber;
         if(ui.guided.seededKey !== seedKey){
           ui.guided.seededKey = seedKey;
@@ -1998,9 +2375,9 @@
     else if(isBodyweight(ex)) hint = 'Objectif : '+target.sets+' × '+target.reps+' reps'+(target.weight>0 ? ' + '+target.weight+' kg' : '');
     else hint = 'Objectif : '+target.sets+' × '+target.reps+' × '+target.weight+' kg';
 
-    var html = '<div class="guided-screen">'+guidedTopHTML(session)+'<div class="g-mid'+(flash?' rest-flash':'')+'">';
+    var html = '<div class="guided-screen'+(warm?' warm':'')+'">'+guidedTopHTML(session)+'<div class="g-mid'+(flash?' rest-flash':'')+'">';
     html += '<div class="guided-ex-name">'+esc(ex.name)+'</div>';
-    if(!ui.guided.isWarmup || totalSets>1) html += '<div class="g-set">Série '+ui.guided.setNumber+' / '+totalSets+'</div>';
+    if(!warm || totalSets>1) html += '<div class="g-set">Série '+ui.guided.setNumber+' / '+totalSets+'</div>';
     html += '<div class="g-hint">'+hint+'</div>';
     if(mode==="timed"){
       html += '<div class="set-stopwatch-big timed'+(timedRunning?' running':'')+'" id="setStopwatch">'+formatTime(timedRunning ? Math.ceil(Math.max(0,(ui.guided.timedEndsAt-Date.now())/1000)) : seconds)+'</div>';
@@ -2406,29 +2783,34 @@
   function renderWarmupPicker(){
     var picker = ui.warmupPicker;
     if(!picker) return "";
-    var currentDefault = picker.dayId ? state.settings.warmupDefaultByDay[picker.dayId] : null;
+    var loc = findSession(picker.sessionId);
+    var defId = loc ? state.settings.warmupDefaultByDay[loc.day.id] : null;
     var html = '<div class="howto-overlay" data-action="noop"><div class="howto-modal warmup-picker-modal" data-action="noop">'+
-      '<div class="howto-modal-title">Échauffement ?</div>';
-    state.warmups.forEach(function(w){
-      var isDefault = w.id===currentDefault;
-      html += '<button class="warmup-picker-row'+(isDefault?' is-default':'')+'" data-action="pickwarmup" data-warmup="'+w.id+'">'+esc(w.name)+
-        (isDefault?' <span class="warmup-picker-tag">par défaut</span>':'')+'</button>';
+      '<div class="howto-modal-title">Ajouter un échauffement</div>';
+    if(!state.warmups.length){
+      html += '<div class="hist-sub" style="margin:0 0 12px;">Aucun modèle pour l’instant. Crée-en un dans Paramètres → « Gérer les modèles d’échauffement », ou ajoute un exercice puis passe-le en échauffement (menu ⋮).</div>';
+    }
+    var ordered = state.warmups.slice().sort(function(a, b){ return (b.id===defId ? 1 : 0) - (a.id===defId ? 1 : 0); });
+    ordered.forEach(function(w){
+      var isDef = w.id===defId;
+      html += '<button class="warmup-picker-row'+(isDef?' is-default':'')+'" data-action="pickwarmup" data-warmup="'+w.id+'">'+esc(w.name)+
+        ' <span class="warmup-picker-count">'+w.entries.length+' exo'+(w.entries.length>1?'s':'')+'</span>'+
+        (isDef?' <span class="warmup-picker-tag">par défaut</span>':'')+'</button>';
     });
-    html += '<button class="warmup-picker-row'+(!currentDefault?' is-default':'')+'" data-action="pickwarmup">Aucun échauffement'+
-      (!currentDefault?' <span class="warmup-picker-tag">par défaut</span>':'')+'</button>';
     html += '<button class="howto-btn" style="width:100%;margin-top:10px;" data-action="cancelwarmuppicker">Annuler</button>';
     html += '</div></div>';
     return html;
   }
 
   function renderSettings(){
+    askOfflineStatus();
     var html = '<div class="settings-back"><a data-action="backtoseance">← Retour</a></div>';
 
     html += '<div class="section-title">Apparence</div><div class="card settings-card">';
     html += '<div class="settings-row"><span>Thème</span><button class="settings-inline-btn" data-action="toggletheme">'+(currentTheme==="light"?"☀️ Clair":"🌙 Sombre")+'</button></div>';
     html += '</div>';
 
-    html += '<div class="section-title">Échauffement</div><div class="card settings-card">';
+    html += '<div class="section-title">Échauffement par défaut (nouvelles séances)</div><div class="card settings-card">';
     DAYS.forEach(function(d){
       var val = state.settings.warmupDefaultByDay[d.id] || "";
       html += '<div class="settings-row"><span>'+d.label+'</span><select data-role="warmupdaydefault" data-day="'+d.id+'">'+
@@ -2437,6 +2819,8 @@
         '</select></div>';
     });
     html += '</div>';
+    html += '<div class="hist-sub">Ce modèle est ajouté automatiquement au début de chaque nouvelle séance du jour.</div>';
+    html += '<button class="backup-btn" style="width:100%; margin-bottom:10px;" data-action="applywarmdefaults">🔥 L’ajouter aux séances existantes</button>';
     html += '<button class="backup-btn" style="width:100%; margin-bottom:20px;" data-action="gotowarmupedit">🔥 Gérer les modèles d\'échauffement</button>';
 
     html += '<div class="section-title">Séance</div><div class="card settings-card">';
@@ -2455,8 +2839,20 @@
       '<button class="backup-btn" data-action="exportdata">Exporter mes données</button>'+
       '<button class="backup-btn" data-action="importdata">Restaurer une sauvegarde</button>'+
       '</div>';
-    html += '<button class="backup-btn" style="width:100%; margin-bottom:10px;" data-action="importhowto">📋 Importer les fiches techniques</button>';
-    html += '<button class="backup-btn" style="width:100%; margin-bottom:20px;" data-action="importwarmups">🔥 Importer des modèles d\'échauffement</button>';
+    html += '<div class="backup-row" style="margin-bottom:10px;">'+
+      '<button class="backup-btn" data-action="importhowto">📋 Importer les fiches</button>'+
+      '<button class="backup-btn" data-action="exporthowto">📋 Exporter les fiches</button>'+
+      '</div>';
+    html += '<div class="backup-row">'+
+      '<button class="backup-btn" data-action="importwarmups">🔥 Importer les modèles</button>'+
+      '<button class="backup-btn" data-action="exportwarmups">🔥 Exporter les modèles</button>'+
+      '</div>';
+    var si2 = storageInfo();
+    html += '<div class="hist-sub">Stockage : '+fmtBytes(si2.used)+' utilisés sur ≈ 5 Mo ('+Math.round(si2.ratio*100)+' %). Estimation prudente (iOS n’indique pas le quota exact) ; alerte à 80 %.</div>';
+    html += '<div class="hist-sub">Mode hors ligne : <b id="offlineStatus">'+esc(offlineStatus)+'</b></div>';
+    if(hasCorruptCopy()){
+      html += '<button class="backup-btn" style="width:100%; margin:6px 0 20px;" data-action="exportcorrupt">⚠️ Exporter la copie des données illisibles</button>';
+    }
     html += '<input type="file" id="importFile" accept="application/json" style="display:none">';
     html += '<input type="file" id="importHowToFile" accept="application/json" style="display:none">';
     html += '<input type="file" id="importWarmupsFile" accept="application/json" style="display:none">';
@@ -2657,7 +3053,7 @@
     } else if(action==="delset"){
       deleteSet(t.dataset.session, t.dataset.ex, t.dataset.set);
     } else if(action==="startguided"){
-      launchSessionWithWarmupPicker(t.dataset.session, t.dataset.day);
+      startGuided(t.dataset.session);
     } else if(action==="guidedvalidate"){
       unlockGuidedAudio();
       guidedValidateSet();
@@ -2684,16 +3080,33 @@
       warmupQuitCancel();
     } else if(action==="pickwarmup"){
       var picker = ui.warmupPicker;
-      if(picker){
-        var wid = t.dataset.warmup || null;
-        if(picker.dayId) state.settings.warmupDefaultByDay[picker.dayId] = wid;
-        save();
-        ui.warmupPicker = null;
-        if(wid) startGuidedWarmup(wid, picker.sessionId);
-        else startGuided(picker.sessionId);
-      }
+      ui.warmupPicker = null;
+      if(picker && t.dataset.warmup){
+        var rr = insertWarmupModel(picker.sessionId, t.dataset.warmup);
+        save(); render();
+        if(rr.added || rr.skipped){
+          showToast(rr.added+" exercice"+(rr.added>1?"s":"")+" d’échauffement ajouté"+(rr.added>1?"s":"")+(rr.skipped ? " · "+rr.skipped+" déjà dans la séance" : ""), false, rr.skipped ? 3500 : 1800);
+        }
+      } else { render(); }
     } else if(action==="cancelwarmuppicker"){
       ui.warmupPicker = null; render();
+    } else if(action==="addwarm"){
+      ui.warmupPicker = {sessionId:t.dataset.session}; render();
+    } else if(action==="togglewarm"){
+      ui.openMenu = null;
+      toggleWarmup(t.dataset.session, t.dataset.ex);
+    } else if(action==="warmdone"){
+      var locW = findSession(t.dataset.session), eW = locW && entryFor(locW.session, t.dataset.ex);
+      if(eW){
+        var tg = eW.target || {}, exW = getExercise(t.dataset.ex);
+        ui.draft[t.dataset.ex] = isCardio(exW)
+          ? {duration:(tg.duration!==undefined?tg.duration:5), speed:(tg.speed!==undefined?tg.speed:5), distance:(tg.distance!==undefined?tg.distance:0)}
+          : {weight:(tg.weight||0), reps:(tg.reps||0)};
+        addSet(t.dataset.session, t.dataset.ex);
+        delete ui.draft[t.dataset.ex];
+      }
+    } else if(action==="applywarmdefaults"){
+      applyWarmDefaultsToSessions();
     } else if(action==="opensettings"){
       ui.tab = "settings"; render();
     } else if(action==="backtoseance"){
@@ -2738,7 +3151,8 @@
     } else if(action==="resetalldata"){
       if(!window.confirm("Réinitialiser TOUTES les données de l'app (séances, historique, échauffements, exercices personnalisés) ? Cette action est irréversible.")) return;
       if(!window.confirm("Dernière confirmation : tout sera perdu si tu n'as pas de sauvegarde exportée. Continuer ?")) return;
-      try{ localStorage.removeItem(STORAGE_KEY); }catch(e){}
+      try{ localStorage.removeItem(STORAGE_KEY); localStorage.removeItem(CORRUPT_KEY); }catch(e){}
+      stateChars = 0; otherChars = measureOtherKeys();
       state = load();
       state.warmups = []; state.settings = {warmupDefaultByDay:{}, defaultRestSeconds:90, devMode:true, weeklyGoals:JSON.parse(JSON.stringify(DEFAULT_GOALS))};
       save();
@@ -2809,6 +3223,16 @@
       document.getElementById("importHowToFile").click();
     } else if(action==="importwarmups"){
       document.getElementById("importWarmupsFile").click();
+    } else if(action==="exporthowto"){
+      exportHowTo();
+    } else if(action==="exportwarmups"){
+      exportWarmups();
+    } else if(action==="exportcorrupt"){
+      exportCorruptCopy();
+    } else if(action==="dismissnotice"){
+      loadNotice = null; render();
+    } else if(action==="snoozestorage"){
+      state.settings.storageSnoozeUntil = Date.now() + 7*86400000; save(); render();
     }
   });
 
@@ -2840,14 +3264,8 @@
           var data = JSON.parse(reader.result);
           if(!validateImportedData(data)){ window.alert("Fichier invalide ou de format inattendu."); return; }
           if(!window.confirm("Restaurer cette sauvegarde ? Les données actuelles seront remplacées.")) return;
-          state = data;
-          if(!state.history) state.history = [];
-          if(!Array.isArray(state.warmups)) state.warmups = [];
-          if(!state.settings || typeof state.settings!=="object") state.settings = {};
-          if(!state.settings.warmupDefaultByDay || typeof state.settings.warmupDefaultByDay!=="object") state.settings.warmupDefaultByDay = {};
-          if(typeof state.settings.defaultRestSeconds!=="number") state.settings.defaultRestSeconds = 90;
-          if(typeof state.settings.devMode!=="boolean") state.settings.devMode = false;
-  if(!state.settings.weeklyGoals || typeof state.settings.weeklyGoals!=="object") state.settings.weeklyGoals = JSON.parse(JSON.stringify(DEFAULT_GOALS));
+          state = repairState(data);
+          state.settings.warmupIntegrated = true;
           save();
           ui.activeDay = null; ui.activeSession = null; ui.historyDetail = null;
           render();
@@ -2910,6 +3328,8 @@
       if(isNaN(gv) || gv<0) gv = 0;
       state.settings.weeklyGoals[t.dataset.muscle] = gv;
       save();
+    } else if(t.dataset.role==="warmsessionmode"){
+      setTarget(t.dataset.session, t.dataset.ex, "mode", t.value);
     } else if(t.dataset.role==="warmupmode"){
       setWarmupTarget(t.dataset.warmup, t.dataset.ex, "mode", t.value);
     } else if(t.dataset.role==="warmupdaydefault"){
@@ -2972,6 +3392,34 @@
     if(tg && tg.closest && tg.closest(".note-area, .howto-modal, .howto-edit-area, .guided-summary-list")) return;
     ev.preventDefault();
   }, {passive:false});
+
+  // ── Hors ligne : service worker (fichier sw.js à placer à côté de fonte.html) ──
+  var offlineStatus = "non pris en charge";
+  function askOfflineStatus(){
+    try{
+      if(navigator.serviceWorker && navigator.serviceWorker.controller) navigator.serviceWorker.controller.postMessage({type:"status"});
+    }catch(e){}
+  }
+  if("serviceWorker" in navigator && /^https?:$/.test(location.protocol)){
+    offlineStatus = "en préparation…";
+    navigator.serviceWorker.addEventListener("message", function(ev){
+      var m = ev.data || {};
+      if(m.type==="fonte-status"){
+        offlineStatus = m.ready ? "prêt ✓" : "en préparation…";
+        var el = document.getElementById("offlineStatus");
+        if(el) el.textContent = offlineStatus;
+      } else if(m.type==="fonte-update" && !ui.guided){
+        showToast("Nouvelle version téléchargée — visible au prochain lancement", false, 4500);
+      }
+    });
+    window.addEventListener("load", function(){
+      navigator.serviceWorker.register("sw.js").then(function(){ return navigator.serviceWorker.ready; }).then(function(reg){
+        [600, 2500, 6000].forEach(function(ms){ setTimeout(function(){ if(reg.active) reg.active.postMessage({type:"status"}); }, ms); });
+      }).catch(function(){ offlineStatus = "indisponible (sw.js introuvable ?)"; });
+    });
+  } else if(location.protocol!=="https:" && location.protocol!=="http:"){
+    offlineStatus = "indisponible (ouvre l’app via https)";
+  }
 
   render();
 })();
