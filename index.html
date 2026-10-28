@@ -468,6 +468,7 @@
   .exercise-card.warm{ border-color:var(--warm); background:linear-gradient(var(--warm-dim),var(--warm-dim)),var(--surface); }
   .exercise-card.warm .ex-head{ cursor:default; }
   .warm-tag{ margin-right:8px; }
+  .dup-tag{ margin-left:8px; font-size:12px; font-weight:700; color:var(--dim); }
   .warm-label{ margin:2px 0 8px; font-size:11px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:var(--warm); }
   .warm-section-title{ margin:16px 4px 8px; font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:var(--warm); }
   .warm-section-title.std{ color:var(--dim); }
@@ -725,7 +726,7 @@
   }
 
   // ── État persistant : chargement sûr, réparation, mesure du stockage ──────────
-  var stateChars = 0, otherChars = 0, loadNotice = null, repairedCount = 0;
+  var stateChars = 0, otherChars = 0, loadNotice = null, repairedCount = 0, idsAssigned = 0;
   var STORAGE_BUDGET_CHARS = 2500000;   // ≈ 5 Mo en UTF-16 : hypothèse prudente (iOS n'indique pas le quota exact)
   var STORAGE_WARN_RATIO = 0.8;         // alerte à partir de 80 % du budget
   var CORRUPT_KEY = STORAGE_KEY + "_illisible";
@@ -759,9 +760,11 @@
   // Chaque élément retiré ou reconstruit incrémente repairedCount (pour prévenir l'utilisateur).
   function arr(v){ if(Array.isArray(v)) return v; if(v!==undefined && v!==null) repairedCount++; return []; }
   function healEntries(list, exercises){
-    var kept = [];
+    var kept = [], seenIds = {};
     arr(list).forEach(function(en){
       if(!isObj(en) || typeof en.exerciseId!=="string"){ repairedCount++; return; }
+      if(typeof en.id!=="string" || seenIds[en.id]){ en.id = uid(); idsAssigned++; }
+      seenIds[en.id] = true;
       if(!Array.isArray(en.sets)){ en.sets = []; repairedCount++; }
       if(en.warmup!==undefined && en.warmup!==true) delete en.warmup;
       if(!isObj(en.target)){
@@ -938,8 +941,8 @@
     }
     save();
   }
-  if(repairedCount>0){
-    if(!loadNotice) loadNotice = {title:"Données réparées", text:"Des éléments incomplets ont été corrigés ou retirés ("+repairedCount+"). Vérifie tes séances et pense à exporter une sauvegarde."};
+  if(repairedCount>0 || idsAssigned>0){
+    if(repairedCount>0 && !loadNotice) loadNotice = {title:"Données réparées", text:"Des éléments incomplets ont été corrigés ou retirés ("+repairedCount+"). Vérifie tes séances et pense à exporter une sauvegarde."};
     save();
   }
 
@@ -971,7 +974,14 @@
     }
     return null;
   }
-  function entryFor(session, exId){ for(var i=0;i<session.entries.length;i++) if(session.entries[i].exerciseId===exId) return session.entries[i]; return null; }
+  // `key` = id d'entrée (cas normal : un même exercice peut figurer plusieurs fois dans une séance) ;
+  // à défaut, id d'exercice (1re entrée trouvée) pour les appels « par exercice ».
+  function entryFor(session, key){
+    var i;
+    for(i=0;i<session.entries.length;i++) if(session.entries[i].id===key) return session.entries[i];
+    for(i=0;i<session.entries.length;i++) if(session.entries[i].exerciseId===key) return session.entries[i];
+    return null;
+  }
   function makeEntry(exId){
     var ex = getExercise(exId);
     var target;
@@ -982,7 +992,7 @@
       target = ex.lastTarget ? {sets:ex.lastTarget.sets, reps:ex.lastTarget.reps, weight:ex.lastTarget.weight, rest:ex.lastTarget.rest||restDefault} : {sets:DEFAULT_TARGET.sets, reps:DEFAULT_TARGET.reps, weight:DEFAULT_TARGET.weight, rest:restDefault};
     }
     if(isBodyweight(ex) && !ex.lastTarget) target.weight = 0;
-    return {exerciseId:exId, target:target, note:"", sets:[]};
+    return {id:uid(), exerciseId:exId, target:target, note:"", sets:[]};
   }
   // ── Échauffement intégré à la séance ─────────────────────────────────────────
   // Une entrée de séance marquée `warmup:true` est un exercice d'échauffement : même moteur
@@ -1010,8 +1020,9 @@
     if(!loc || !w) return res;
     w.entries.forEach(function(me){
       if(!getExercise(me.exerciseId)) return;
-      if(entryFor(loc.session, me.exerciseId)){ res.skipped++; return; }   // un exercice ne peut figurer qu'une fois par séance
-      insertWarmEntry(loc.session, {exerciseId:me.exerciseId, target:JSON.parse(JSON.stringify(me.target || {})), note:"", sets:[]});
+      // Le même exercice peut exister en standard ET en échauffement ; on évite seulement d'insérer deux fois le même modèle.
+      if(loc.session.entries.some(function(x){ return isWarmEntry(x) && x.exerciseId===me.exerciseId; })){ res.skipped++; return; }
+      insertWarmEntry(loc.session, {id:uid(), exerciseId:me.exerciseId, target:JSON.parse(JSON.stringify(me.target || {})), note:"", sets:[]});
       res.added++;
     });
     return res;
@@ -1056,6 +1067,24 @@
     save(); render();
     showToast("Échauffement ajouté à "+n+" séance"+(n>1?"s":""));
   }
+  // « 1/2 », « 2/2 »… quand le même exercice figure plusieurs fois dans la même partie (échauffement / séance).
+  function dupTag(session, e){
+    var same = session.entries.filter(function(x){ return x.exerciseId===e.exerciseId && isWarmEntry(x)===isWarmEntry(e); });
+    return same.length<2 ? '' : ' <span class="dup-tag">'+(same.indexOf(e)+1)+'/'+same.length+'</span>';
+  }
+  // Exercice (standard) jamais réalisé : on propose les valeurs de l'objectif plutôt que 20 kg / 8 reps.
+  function seedGuidedDrafts(session){
+    session.entries.forEach(function(en){
+      if(isWarmEntry(en)) return;       // l'échauffement est amorcé série par série à l'écran
+      var exN = getExercise(en.exerciseId);
+      if(exN && !isCardio(exN) && exN.lastWeight===undefined && exN.lastReps===undefined){
+        var tg = en.target || {};
+        ui.draft[en.exerciseId] = {weight:(tg.weight!==undefined?tg.weight:(isBodyweight(exN)?0:20)), reps:(tg.reps!==undefined?tg.reps:8)};
+      }
+    });
+  }
+  // Sortie du bloc d'échauffement : on oublie ses brouillons (un même exercice peut aussi être dans la séance).
+  function leaveWarmBlock(session){ clearWarmDrafts(session); seedGuidedDrafts(session); }
   function clearWarmDrafts(session){
     if(!session) return;
     session.entries.forEach(function(e){ if(isWarmEntry(e)) delete ui.draft[e.exerciseId]; });
@@ -1084,22 +1113,27 @@
   function addExerciseToSession(sessionId, exId){
     var loc = findSession(sessionId);
     if(!loc) return;
-    if(!entryFor(loc.session, exId)){
-      var ne = makeEntry(exId), exN = getExercise(exId);
-      // Un exercice de catégorie « Échauffement » arrive d'office dans le bloc d'échauffement (vert).
-      if(exN && exN.cat==="Échauffement"){
-        if(!isCardio(exN) && !exN.lastTarget) ne.target = JSON.parse(JSON.stringify(WARM_TARGET));
-        insertWarmEntry(loc.session, ne);
-      } else {
-        loc.session.entries.push(ne);
-      }
+    var already = loc.session.entries.some(function(x){ return x.exerciseId===exId; });
+    var ne = makeEntry(exId), exN = getExercise(exId);
+    // Un exercice de catégorie « Échauffement » arrive d'office dans le bloc d'échauffement (vert).
+    if(exN && exN.cat==="Échauffement"){
+      if(!isCardio(exN) && !exN.lastTarget) ne.target = JSON.parse(JSON.stringify(WARM_TARGET));
+      insertWarmEntry(loc.session, ne);
+    } else {
+      loc.session.entries.push(ne);
     }
     save();
-    ui.tab = "seance"; ui.activeDay = loc.day.id; ui.activeSession = sessionId; ui.openExercise = exId;
+    ui.tab = "seance"; ui.activeDay = loc.day.id; ui.activeSession = sessionId; ui.openExercise = ne.id;
     render();
+    // Même exercice ajouté une 2e fois : permis, mais un geste involontaire se rattrape en un tap.
+    if(already){
+      showUndoToast("Exercice ajouté une 2ᵉ fois", function(){
+        var l2 = findSession(sessionId);
+        if(l2){ l2.session.entries = l2.session.entries.filter(function(x){ return x!==ne; }); save(); render(); }
+      });
+    }
   }
 
-  // ---- Échauffements : modèles réutilisables, indépendants des jours ----
   function findWarmup(id){
     for(var i=0;i<state.warmups.length;i++) if(state.warmups[i].id===id) return state.warmups[i];
     return null;
@@ -1226,7 +1260,7 @@
   var lastAddSetKey = "";
   function addSet(sessionId, exId){
     var now = Date.now();
-    var key = sessionId+"|"+exId;
+    var key = sessionId+"|"+exId;   // exId = clé d'entrée
     if(key===lastAddSetKey && now - lastAddSetTs < 300) return;
     lastAddSetTs = now;
     lastAddSetKey = key;
@@ -1234,7 +1268,8 @@
     if(!loc) return;
     var session = loc.session;
     var e = entryFor(session, exId);
-    if(!e){ e = makeEntry(exId); session.entries.push(e); }
+    if(!e){ if(!getExercise(exId)) return; e = makeEntry(exId); session.entries.push(e); }
+    exId = e.exerciseId;      // à partir d'ici : l'exercice (historique, brouillon, records)
     if(isWarmEntry(e)){ pushWarmSet(e, exId); return; }
     var d = draftFor(exId);
     var ex = getExercise(exId);
@@ -1286,7 +1321,7 @@
     if(!loc) return;
     var e = entryFor(loc.session, exId);
     if(!e) return;
-    var ex = getExercise(exId);
+    var ex = getExercise(e.exerciseId);
     if(isWarmEntry(e)){
       // Cible d'échauffement : on n'alimente PAS lastTarget (mémoire des objectifs « normaux »).
       if(!e.target) e.target = isCardio(ex) ? {duration:5, speed:5, distance:0.5, rest:30} : JSON.parse(JSON.stringify(WARM_TARGET));
@@ -1454,14 +1489,7 @@
     if(!loc || loc.session.entries.length===0) return;
     // Remise à zéro automatique des séries affichées (l'historique, lui, est conservé).
     loc.session.entries.forEach(function(e){ e.sets = []; });
-    // Exercice jamais réalisé : on propose les valeurs de l'objectif plutôt que 20 kg / 8 reps.
-    loc.session.entries.forEach(function(en){
-      var exN = getExercise(en.exerciseId);
-      if(exN && !isCardio(exN) && exN.lastWeight===undefined && exN.lastReps===undefined){
-        var tg = en.target || {};
-        ui.draft[en.exerciseId] = {weight:(tg.weight!==undefined?tg.weight:(isBodyweight(exN)?0:20)), reps:(tg.reps!==undefined?tg.reps:8)};
-      }
-    });
+    seedGuidedDrafts(loc.session);
     save();
     clearInterval(guidedTimer); guidedTimer = null;
     unlockGuidedAudio();
@@ -1585,7 +1613,7 @@
     ui.guided.warmSkipped += remaining;
     clearInterval(guidedTimer); guidedTimer=null;
     clearInterval(setStopwatchTimer); setStopwatchTimer=null;
-    clearWarmDrafts(session);
+    leaveWarmBlock(session);
     ui.guided.timedEndsAt = null;
     ui.guided.showQuitChoice = false;
     ui.guided.entryIndex = n;
@@ -1655,7 +1683,7 @@
     if(!entry){ ui.guided.phase="done"; render(); return; }
     var ex = getExercise(entry.exerciseId);
     if(!ex){ ui.guided.entryIndex++; ui.guided.setNumber=1; render(); return; }
-    addSet(ui.guided.sessionId, entry.exerciseId);
+    addSet(ui.guided.sessionId, entry.id);
     if(isWarmEntry(entry)) ui.guided.warmLogged++; else ui.guided.setsLogged++;
     var target = entry.target || {};
     var totalSets = isCardio(ex) ? 1 : (target.sets || 1);
@@ -1671,7 +1699,7 @@
       // Fin du bloc d'échauffement : on enchaîne directement sur le 1er exercice, sans repos.
       var nextAfter = session.entries[ui.guided.entryIndex];
       if(isWarmEntry(entry) && nextAfter && !isWarmEntry(nextAfter)){
-        clearWarmDrafts(session);
+        leaveWarmBlock(session);
         ui.guided.phase = "log";
         ui.guided.setStartedAt = Date.now();
         render();
@@ -1713,6 +1741,8 @@
       finishGuidedRun();
       return;
     } else {
+      var nowE = session.entries[ui.guided.entryIndex];
+      if(curEntry && isWarmEntry(curEntry) && nowE && !isWarmEntry(nowE)) leaveWarmBlock(session);
       ui.guided.phase = "log";
       ui.guided.setStartedAt = Date.now();
     }
@@ -1738,7 +1768,7 @@
     var entry = session.entries[ui.guided.entryIndex];
     if(entry && entry.sets.length){
       var lastSet = entry.sets[entry.sets.length-1];
-      deleteSet(ui.guided.sessionId, entry.exerciseId, lastSet.id, true);
+      deleteSet(ui.guided.sessionId, entry.id, lastSet.id, true);
       if(isWarmEntry(entry)) ui.guided.warmLogged = Math.max(0, ui.guided.warmLogged-1);
       else ui.guided.setsLogged = Math.max(0, ui.guided.setsLogged-1);
     }
@@ -1790,7 +1820,8 @@
     var loc = findSession(sessionId);
     if(!loc) return;
     if(!window.confirm("Retirer cet exercice de cette séance ?")) return;
-    loc.session.entries = loc.session.entries.filter(function(e){ return e.exerciseId!==exId; });
+    var rmE = entryFor(loc.session, exId);
+    loc.session.entries = loc.session.entries.filter(function(e){ return e!==rmE; });
     save(); render();
   }
   function moveExercise(sessionId, exId, dir){
@@ -1798,7 +1829,8 @@
     if(!loc) return;
     var arr = loc.session.entries;
     var idx = -1;
-    for(var i=0;i<arr.length;i++){ if(arr[i].exerciseId===exId){ idx=i; break; } }
+    var mvE = entryFor(loc.session, exId);
+    idx = mvE ? arr.indexOf(mvE) : -1;
     if(idx<0) return;
     var newIdx = idx + dir;
     if(newIdx<0 || newIdx>=arr.length) return;
@@ -1840,17 +1872,19 @@
     return order.map(function(k){ return map[k]; });
   }
 
-  function renderExerciseCard(session, exId){
+  function renderExerciseCard(session, key){
+    var e = entryFor(session, key);
+    if(!e) return "";
+    var exId = e.exerciseId, ek = e.id || exId;   // exId : l'exercice ; ek : CETTE entrée de séance
     var ex = getExercise(exId);
+    if(!ex) return "";
     var cardio = isCardio(ex);
-    var e = entryFor(session, exId);
-    if(!e){ e = makeEntry(exId); session.entries.push(e); }
     if(!e.target){ e.target = cardio ? {duration:DEFAULT_TARGET_CARDIO.duration, speed:DEFAULT_TARGET_CARDIO.speed, distance:DEFAULT_TARGET_CARDIO.distance} : {sets:DEFAULT_TARGET.sets, reps:DEFAULT_TARGET.reps, weight:DEFAULT_TARGET.weight}; }
     if(e.note===undefined) e.note = "";
     if(isWarmEntry(e)) return renderWarmCard(session, e, ex);
     var target = e.target;
     var sets = e.sets;
-    var open = ui.openExercise === exId;
+    var open = ui.openExercise === ek;
     var d = draftFor(exId);
 
     var metGoal, chips;
@@ -1860,7 +1894,7 @@
       chips = groups.map(function(g){
         var label = (g.count>1 ? '<span class="cnt">'+g.count+'</span>' : '') + g.distance+'km · '+g.speed+'km/h · '+g.duration+'min';
         return '<span class="set-chip'+(g.pr?' pr':'')+'"><span class="lbl">'+(g.pr?'<span class="pr-star" title="Record" aria-label="Record">★</span>':'')+label+'</span>'+
-          '<span class="del" data-action="delset" data-session="'+session.id+'" data-ex="'+exId+'" data-set="'+g.lastId+'" role="button" tabindex="0" aria-label="Supprimer la dernière série de ce type">✕</span></span>';
+          '<span class="del" data-action="delset" data-session="'+session.id+'" data-ex="'+ek+'" data-set="'+g.lastId+'" role="button" tabindex="0" aria-label="Supprimer la dernière série de ce type">✕</span></span>';
       }).join("");
     } else {
       var doneCount = sets.filter(function(st){ return st.weight >= target.weight && st.reps >= target.reps; }).length;
@@ -1869,31 +1903,31 @@
       chips = groups.map(function(g){
         var label = (g.count>1 ? '<span class="cnt">'+g.count+'</span>' : '') + loadLabel(ex, g.weight, g.reps);
         return '<span class="set-chip'+(g.pr?' pr':'')+'"><span class="lbl">'+(g.pr?'<span class="pr-star" title="Record" aria-label="Record">★</span>':'')+label+'</span>'+
-          '<span class="del" data-action="delset" data-session="'+session.id+'" data-ex="'+exId+'" data-set="'+g.lastId+'" role="button" tabindex="0" aria-label="Supprimer la dernière série de ce type">✕</span></span>';
+          '<span class="del" data-action="delset" data-session="'+session.id+'" data-ex="'+ek+'" data-set="'+g.lastId+'" role="button" tabindex="0" aria-label="Supprimer la dernière série de ce type">✕</span></span>';
       }).join("");
     }
 
     var html = '<div class="card exercise-card'+(open?' open':'')+(metGoal?' goal-met':'')+'">';
-    html += '<div class="ex-head" data-action="toggle" data-ex="'+exId+'">';
-    var menuOpen = ui.openMenu === exId;
-    html += '<span class="ex-title">'+esc(ex.name)+'</span>'+
+    html += '<div class="ex-head" data-action="toggle" data-ex="'+ek+'">';
+    var menuOpen = ui.openMenu === ek;
+    html += '<span class="ex-title">'+esc(ex.name)+dupTag(session, e)+'</span>'+
       '<span class="ex-head-right">'+
-      '<button class="menu-btn'+(menuOpen?' active':'')+'" data-action="togglemenu" data-ex="'+exId+'" aria-label="Options de l’exercice">⋮</button>'+
+      '<button class="menu-btn'+(menuOpen?' active':'')+'" data-action="togglemenu" data-ex="'+ek+'" aria-label="Options de l’exercice">⋮</button>'+
       '<span class="chevron" aria-hidden="true">'+ICON.chevron+'</span></span></div>';
     if(menuOpen){
-      var linking = ui.linkFrom && ui.linkFrom.session===session.id && ui.linkFrom.ex===exId;
+      var linking = ui.linkFrom && ui.linkFrom.session===session.id && ui.linkFrom.ex===ek;
       var idxS = session.entries.indexOf(e), prevIsWarm = idxS>0 && isWarmEntry(session.entries[idxS-1]);
       var linkAction, linkLabel;
       if(e.supersetId){ linkAction="unlink"; linkLabel="✕ Délier le superset"; }
       else if(linking){ linkAction="linktoggle"; linkLabel="✕ Annuler la liaison"; }
       else { linkAction="linktoggle"; linkLabel="🔗 Lier en superset"; }
       html += '<div class="card-menu">'+
-        (prevIsWarm ? '' : '<button data-action="moveex" data-session="'+session.id+'" data-ex="'+exId+'" data-dir="-1">↑ Monter</button>')+
-        '<button data-action="moveex" data-session="'+session.id+'" data-ex="'+exId+'" data-dir="1">↓ Descendre</button>'+
-        '<button data-action="togglewarm" data-session="'+session.id+'" data-ex="'+exId+'">🔥 Passer en échauffement</button>'+
-        '<button data-action="'+linkAction+'" data-session="'+session.id+'" data-ex="'+exId+'">'+linkLabel+'</button>'+
+        (prevIsWarm ? '' : '<button data-action="moveex" data-session="'+session.id+'" data-ex="'+ek+'" data-dir="-1">↑ Monter</button>')+
+        '<button data-action="moveex" data-session="'+session.id+'" data-ex="'+ek+'" data-dir="1">↓ Descendre</button>'+
+        '<button data-action="togglewarm" data-session="'+session.id+'" data-ex="'+ek+'">🔥 Passer en échauffement</button>'+
+        '<button data-action="'+linkAction+'" data-session="'+session.id+'" data-ex="'+ek+'">'+linkLabel+'</button>'+
         '<button data-action="editexfromseance" data-ex="'+exId+'">'+ICON.edit+' Modifier l’exercice</button>'+
-        '<button class="danger" data-action="removeex" data-session="'+session.id+'" data-ex="'+exId+'">'+ICON.trash+' Retirer de la séance</button>'+
+        '<button class="danger" data-action="removeex" data-session="'+session.id+'" data-ex="'+ek+'">'+ICON.trash+' Retirer de la séance</button>'+
         '</div>';
     }
     if(e.supersetId){
@@ -1903,16 +1937,16 @@
 
     if(cardio){
       html += '<div class="objectif-row"><span class="obj-label">Objectif</span>'+
-        '<input class="obj-input" type="number" inputmode="numeric" min="0" data-role="target-duration" data-session="'+session.id+'" data-ex="'+exId+'" value="'+target.duration+'" aria-label="Objectif de durée en minutes"> min ×'+
-        '<input class="obj-input" type="number" inputmode="decimal" min="0" data-role="target-speed" data-session="'+session.id+'" data-ex="'+exId+'" value="'+target.speed+'" aria-label="Objectif de vitesse en km/h"> km/h ×'+
-        '<input class="obj-input" type="number" inputmode="decimal" min="0" data-role="target-distance" data-session="'+session.id+'" data-ex="'+exId+'" value="'+target.distance+'" aria-label="Objectif de distance en km"> km</div>';
+        '<input class="obj-input" type="number" inputmode="numeric" min="0" data-role="target-duration" data-session="'+session.id+'" data-ex="'+ek+'" value="'+target.duration+'" aria-label="Objectif de durée en minutes"> min ×'+
+        '<input class="obj-input" type="number" inputmode="decimal" min="0" data-role="target-speed" data-session="'+session.id+'" data-ex="'+ek+'" value="'+target.speed+'" aria-label="Objectif de vitesse en km/h"> km/h ×'+
+        '<input class="obj-input" type="number" inputmode="decimal" min="0" data-role="target-distance" data-session="'+session.id+'" data-ex="'+ek+'" value="'+target.distance+'" aria-label="Objectif de distance en km"> km</div>';
     } else {
       html += '<div class="objectif-row"><span class="obj-label">Objectif</span>'+
-        '<input class="obj-input" type="number" inputmode="numeric" min="0" data-role="target-sets" data-session="'+session.id+'" data-ex="'+exId+'" value="'+target.sets+'" aria-label="Objectif de nombre de séries"> séries ×'+
-        '<input class="obj-input" type="number" inputmode="numeric" min="0" data-role="target-reps" data-session="'+session.id+'" data-ex="'+exId+'" value="'+target.reps+'" aria-label="Objectif de nombre de répétitions"> reps ×'+
-        '<input class="obj-input" type="number" inputmode="decimal" min="0" data-role="target-weight" data-session="'+session.id+'" data-ex="'+exId+'" value="'+target.weight+'" aria-label="Objectif de poids en kg"> '+(isBodyweight(ex)?'kg de lest':'kg')+'</div>';
+        '<input class="obj-input" type="number" inputmode="numeric" min="0" data-role="target-sets" data-session="'+session.id+'" data-ex="'+ek+'" value="'+target.sets+'" aria-label="Objectif de nombre de séries"> séries ×'+
+        '<input class="obj-input" type="number" inputmode="numeric" min="0" data-role="target-reps" data-session="'+session.id+'" data-ex="'+ek+'" value="'+target.reps+'" aria-label="Objectif de nombre de répétitions"> reps ×'+
+        '<input class="obj-input" type="number" inputmode="decimal" min="0" data-role="target-weight" data-session="'+session.id+'" data-ex="'+ek+'" value="'+target.weight+'" aria-label="Objectif de poids en kg"> '+(isBodyweight(ex)?'kg de lest':'kg')+'</div>';
     }
-    html += '<div class="rest-line">⏱ repos <input class="rest-input-plain" type="number" inputmode="numeric" min="0" step="5" data-role="target-rest" data-session="'+session.id+'" data-ex="'+exId+'" value="'+(target.rest||90)+'" aria-label="Temps de repos en secondes"> sec entre les séries</div>';
+    html += '<div class="rest-line">⏱ repos <input class="rest-input-plain" type="number" inputmode="numeric" min="0" step="5" data-role="target-rest" data-session="'+session.id+'" data-ex="'+ek+'" value="'+(target.rest||90)+'" aria-label="Temps de repos en secondes"> sec entre les séries</div>';
 
     var stampTxt = sets.length ? setsStamp(sets) : "";
     if(stampTxt) html += '<div class="chips-stamp">'+stampTxt+'</div>';
@@ -1921,7 +1955,7 @@
     if(metGoal) html += '<span class="goal-badge">✓ Objectif atteint</span>';
     html += '</div>';
 
-    html += '<textarea class="note-area" placeholder="Note (ressenti, variante, rappel…)" data-role="note" data-session="'+session.id+'" data-ex="'+exId+'">'+esc(e.note||"")+'</textarea>';
+    html += '<textarea class="note-area" placeholder="Note (ressenti, variante, rappel…)" data-role="note" data-session="'+session.id+'" data-ex="'+ek+'">'+esc(e.note||"")+'</textarea>';
 
     if(open){
       html += '<div class="log-panel">';
@@ -1948,7 +1982,7 @@
           '<input class="num" type="text" inputmode="numeric" data-action="setval" data-target="'+exId+'" data-prop="reps" value="'+d.reps+'">'+
           stepBtn(1,exId,"reps","+","Augmenter le nombre de répétitions")+'</div></div>';
       }
-      html += '<button class="validate-btn" data-action="addset" data-session="'+session.id+'" data-ex="'+exId+'">Valider</button>';
+      html += '<button class="validate-btn" data-action="addset" data-session="'+session.id+'" data-ex="'+ek+'">Valider</button>';
       html += '</div>';
     }
     html += '</div>';
@@ -2142,11 +2176,11 @@
     }
     if(nWarm>0){
       html += '<div class="warm-section-title">🔥 Échauffement</div>';
-      session.entries.slice(0, nWarm).forEach(function(e){ html += renderExerciseCard(session, e.exerciseId); });
+      session.entries.slice(0, nWarm).forEach(function(e){ html += renderExerciseCard(session, e.id); });
     }
     html += '<button class="warm-add-btn" data-action="addwarm" data-session="'+session.id+'">🔥 Ajouter un échauffement</button>';
     if(nWarm>0 && session.entries.length>nWarm) html += '<div class="warm-section-title std">Séance</div>';
-    session.entries.slice(nWarm).forEach(function(e){ html += renderExerciseCard(session, e.exerciseId); });
+    session.entries.slice(nWarm).forEach(function(e){ html += renderExerciseCard(session, e.id); });
     html += '<button class="cta-btn" data-action="goto-exercices">+ Ajouter un exercice</button>';
     var anySets = session.entries.some(function(e){ return e.sets.length>0; });
     if(anySets) html += '<button class="reset-btn" data-action="resetsession" data-session="'+session.id+'">Réinitialiser les séries de cette séance</button>';
@@ -2156,13 +2190,13 @@
 
   // Carte d'un exercice d'ÉCHAUFFEMENT dans la séance (verte) : réglages du bloc, bouton bascule dans le menu ⋮.
   function renderWarmCard(session, e, ex){
-    var exId = e.exerciseId, sid = session.id, cardio = isCardio(ex), t = e.target || {}, mode = entryMode(e);
+    var exId = e.exerciseId, ek = e.id || exId, sid = session.id, cardio = isCardio(ex), t = e.target || {}, mode = entryMode(e);
     var idx = session.entries.indexOf(e), nW = warmCount(session);
-    var menuOpen = ui.openMenu === exId;
-    var base = ' data-session="'+sid+'" data-ex="'+exId+'"';
+    var menuOpen = ui.openMenu === ek;
+    var base = ' data-session="'+sid+'" data-ex="'+ek+'"';
     var h = '<div class="card exercise-card warm">';
-    h += '<div class="ex-head"><span class="ex-title"><span class="warm-tag" aria-hidden="true">🔥</span>'+esc(ex.name)+'</span>'+
-      '<span class="ex-head-right"><button class="menu-btn'+(menuOpen?' active':'')+'" data-action="togglemenu" data-ex="'+exId+'" aria-label="Options de l’exercice">⋮</button></span></div>';
+    h += '<div class="ex-head"><span class="ex-title"><span class="warm-tag" aria-hidden="true">🔥</span>'+esc(ex.name)+dupTag(session, e)+'</span>'+
+      '<span class="ex-head-right"><button class="menu-btn'+(menuOpen?' active':'')+'" data-action="togglemenu" data-ex="'+ek+'" aria-label="Options de l’exercice">⋮</button></span></div>';
     if(menuOpen){
       h += '<div class="card-menu">'+
         (idx>0 ? '<button data-action="moveex"'+base+' data-dir="-1">↑ Monter</button>' : '')+
@@ -2319,18 +2353,18 @@
     // Le bouton « Annuler » réserve toujours sa place : plus aucun décalage de « Valider ».
     var undoBtn = '<button class="g-undo'+(canGoBack?'':' ghost')+'" data-action="guidedgoback"'+(canGoBack?'':' tabindex="-1" aria-hidden="true" disabled')+'>'+ICON.undo+' Annuler la dernière série</button>';
     var noteHTML = warm ? '' :
-      '<textarea class="note-area guided-note" rows="1" placeholder="Note sur '+esc(ex.name)+'…" data-role="note" data-session="'+session.id+'" data-ex="'+entry.exerciseId+'">'+esc(entry.note||"")+'</textarea>';
+      '<textarea class="note-area guided-note" rows="1" placeholder="Note sur '+esc(ex.name)+'…" data-role="note" data-session="'+session.id+'" data-ex="'+(entry.id||entry.exerciseId)+'">'+esc(entry.note||"")+'</textarea>';
 
     if(ui.guided.phase==="rest"){
       var remaining = (ui.guided.restEndsAt - Date.now())/1000;
       var nextTitle, nextSub;
       if(ui.guided.setNumber<=totalSets){
-        nextTitle = esc(ex.name);
+        nextTitle = esc(ex.name)+dupTag(session, entry);
         nextSub = (totalSets>1 ? 'Série '+ui.guided.setNumber+'/'+totalSets+' · ' : '')+targetSummary(ex, target);
       } else {
         var nextEntry = entries[ui.guided.entryIndex+1];
         var nextEx = nextEntry ? getExercise(nextEntry.exerciseId) : null;
-        nextTitle = nextEx ? esc(nextEx.name) : 'Fin de séance';
+        nextTitle = nextEx ? esc(nextEx.name)+dupTag(session, nextEntry) : 'Fin de séance';
         nextSub = (nextEx && nextEntry) ? targetSummary(nextEx, nextEntry.target||{}) : '';
       }
       return '<div class="guided-screen'+(warm?' warm':'')+'">'+
@@ -2376,7 +2410,7 @@
     else hint = 'Objectif : '+target.sets+' × '+target.reps+' × '+target.weight+' kg';
 
     var html = '<div class="guided-screen'+(warm?' warm':'')+'">'+guidedTopHTML(session)+'<div class="g-mid'+(flash?' rest-flash':'')+'">';
-    html += '<div class="guided-ex-name">'+esc(ex.name)+'</div>';
+    html += '<div class="guided-ex-name">'+esc(ex.name)+dupTag(session, entry)+'</div>';
     if(!warm || totalSets>1) html += '<div class="g-set">Série '+ui.guided.setNumber+' / '+totalSets+'</div>';
     html += '<div class="g-hint">'+hint+'</div>';
     if(mode==="timed"){
@@ -3098,12 +3132,12 @@
     } else if(action==="warmdone"){
       var locW = findSession(t.dataset.session), eW = locW && entryFor(locW.session, t.dataset.ex);
       if(eW){
-        var tg = eW.target || {}, exW = getExercise(t.dataset.ex);
-        ui.draft[t.dataset.ex] = isCardio(exW)
+        var tg = eW.target || {}, exW = getExercise(eW.exerciseId);
+        ui.draft[eW.exerciseId] = isCardio(exW)
           ? {duration:(tg.duration!==undefined?tg.duration:5), speed:(tg.speed!==undefined?tg.speed:5), distance:(tg.distance!==undefined?tg.distance:0)}
           : {weight:(tg.weight||0), reps:(tg.reps||0)};
-        addSet(t.dataset.session, t.dataset.ex);
-        delete ui.draft[t.dataset.ex];
+        addSet(t.dataset.session, eW.id);
+        delete ui.draft[eW.exerciseId];
       }
     } else if(action==="applywarmdefaults"){
       applyWarmDefaultsToSessions();

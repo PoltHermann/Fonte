@@ -72,24 +72,29 @@ async function precache(cache, url) {
   } catch (e) { /* hors ligne : on réessaiera au prochain lancement */ }
 }
 
-// Vrai si la page téléchargée n'est plus celle qui est en cache.
-function changed(a, b) {
-  var keys = ["etag", "last-modified", "content-length"];
-  for (var i = 0; i < keys.length; i++) {
-    var x = a.headers.get(keys[i]), y = b.headers.get(keys[i]);
-    if (x || y) return x !== y;
+// Vrai si le CONTENU de la page téléchargée diffère de la copie en cache.
+// (On compare le texte, pas les en-têtes : l'ETag / Last-Modified d'un CDN peuvent varier d'une
+// requête à l'autre pour un fichier identique, ce qui affichait « nouvelle version » à chaque lancement.)
+async function sameBody(a, b) {
+  try {
+    var texts = await Promise.all([a.text(), b.text()]);
+    return texts[0] === texts[1];
+  } catch (e) {
+    return true; // doute : on ne dérange pas l'utilisateur
   }
-  return false;
 }
 
 async function notifyUpdate() {
   var clients = await self.clients.matchAll({ type: "window" });
-  clients.forEach(function (c) { c.postMessage({ type: "fonte-update" }); });
+  clients
+    .filter(function (c) { return c.url.indexOf(self.registration.scope) === 0; })
+    .forEach(function (c) { c.postMessage({ type: "fonte-update" }); });
 }
 
 async function handle(event, req) {
   var cache = await caches.open(VERSION);
   var cached = await cache.match(req, { ignoreSearch: true });
+  var forCompare = cached ? cached.clone() : null; // copie pour la comparaison : `cached` est consommé par la page
   var isNav = req.mode === "navigate";
 
   var refresh = (async function () {
@@ -99,7 +104,7 @@ async function handle(event, req) {
       var clean = await cleanResponse(res);
       await cache.put(req.url, clean.clone());
       if (isNav) await cache.put(SHELL_KEY, clean.clone());
-      if (isNav && cached && changed(cached, clean)) await notifyUpdate();
+      if (isNav && forCompare && !(await sameBody(forCompare, clean.clone()))) await notifyUpdate();
       return clean;
     } catch (e) {
       return null; // hors ligne
