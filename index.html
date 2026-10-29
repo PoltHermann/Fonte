@@ -458,7 +458,7 @@
   #app.app-guided main{ padding:0; overflow:hidden; display:flex; flex-direction:column; min-height:0; }
   .guided-screen{
     flex:1; min-height:0; display:flex; flex-direction:column; width:100%; max-width:430px; margin:0 auto; text-align:center;
-    padding:calc(var(--safe-t) + 12px) 18px calc(var(--safe-b) + 14px);
+    padding:calc(var(--safe-t) + 12px) 18px max(14px, calc(var(--safe-b) * 0.5 + 4px));
   }
   .g-top{ flex:none; display:flex; flex-direction:column; align-items:center; gap:8px; }
   .g-top .guided-progress-wrap{ margin:0; width:100%; }
@@ -473,8 +473,6 @@
   .warm-section-title{ margin:16px 4px 8px; font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:var(--warm); }
   .warm-section-title.std{ color:var(--dim); }
   .warm-add-btn{ display:block; width:100%; margin:4px 0 14px; padding:12px; border:1.5px dashed var(--warm); border-radius:var(--radius); background:transparent; color:var(--warm); font-size:14px; font-weight:700; cursor:pointer; }
-  .warm-progress{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:10px; font-size:13px; color:var(--dim); }
-  .warm-done-btn{ padding:9px 16px; border:0; border-radius:12px; background:var(--warm); color:var(--on-warm); font-size:14px; font-weight:800; cursor:pointer; }
   .g-top.warm .g-live{ color:var(--warm); }
   .g-top.warm .g-live i{ background:var(--warm); }
   .g-top.warm .guided-progress-fill{ background:var(--warm); }
@@ -2226,9 +2224,6 @@
       }
     }
     h += '<div class="rest-line">⏱ repos <input class="rest-input-plain" type="number" inputmode="numeric" min="0" step="5" data-role="target-rest"'+base+' value="'+(t.rest!==undefined?t.rest:30)+'" aria-label="Temps de repos en secondes"> s</div>';
-    var total = cardio ? 1 : (t.sets || 1);
-    h += '<div class="warm-progress"><span>'+(e.sets.length>0 ? e.sets.length+' / '+total+' faite'+(e.sets.length>1?'s':'') : 'Pas encore fait')+'</span>'+
-      '<button class="warm-done-btn" data-action="warmdone"'+base+'>✓ Fait</button></div>';
     h += '</div>';
     return h;
   }
@@ -3129,16 +3124,6 @@
     } else if(action==="togglewarm"){
       ui.openMenu = null;
       toggleWarmup(t.dataset.session, t.dataset.ex);
-    } else if(action==="warmdone"){
-      var locW = findSession(t.dataset.session), eW = locW && entryFor(locW.session, t.dataset.ex);
-      if(eW){
-        var tg = eW.target || {}, exW = getExercise(eW.exerciseId);
-        ui.draft[eW.exerciseId] = isCardio(exW)
-          ? {duration:(tg.duration!==undefined?tg.duration:5), speed:(tg.speed!==undefined?tg.speed:5), distance:(tg.distance!==undefined?tg.distance:0)}
-          : {weight:(tg.weight||0), reps:(tg.reps||0)};
-        addSet(t.dataset.session, eW.id);
-        delete ui.draft[eW.exerciseId];
-      }
     } else if(action==="applywarmdefaults"){
       applyWarmDefaultsToSessions();
     } else if(action==="opensettings"){
