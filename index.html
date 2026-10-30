@@ -466,7 +466,6 @@
   .guided-progress-label{ font-size:12px; color:var(--dim); }
   .g-live{ display:inline-flex; align-items:center; gap:8px; font-size:12px; font-weight:800; letter-spacing:.07em; text-transform:uppercase; color:var(--accent-text); }
   .exercise-card.warm{ border-color:var(--warm); background:linear-gradient(var(--warm-dim),var(--warm-dim)),var(--surface); }
-  .exercise-card.warm .ex-head{ cursor:default; }
   .warm-tag{ margin-right:8px; }
   .dup-tag{ margin-left:8px; font-size:12px; font-weight:700; color:var(--dim); }
   .warm-label{ margin:2px 0 8px; font-size:11px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:var(--warm); }
@@ -541,6 +540,17 @@
   .g-bottom .g-undo{ margin:0; align-self:center; }
   .g-undo{ display:inline-flex; align-items:center; justify-content:center; gap:7px; }
   .g-undo.ghost{ visibility:hidden; pointer-events:none; }
+  .warm-sum{ display:block; margin-top:2px; font-size:12px; font-weight:600; color:var(--dim); }
+  .card-menu{ margin-bottom:12px; }
+  .ex-sticky{ position:sticky; top:0; z-index:6; margin:-16px -16px 8px; padding:12px 16px 8px; background:var(--bg); }
+  .ex-sticky .search-wrap{ margin-bottom:0; }
+  .ex-sticky .picker-banner{ margin-bottom:8px; }
+  .g-act{ flex:none; display:flex; flex-direction:column; gap:10px; width:100%; }
+  .g-act .guided-note{ margin:0; text-align:left; }
+  .g-act .validate-btn{ margin:0; padding:16px; font-size:17px; width:100%; }
+  .g-secondary{ margin-top:36px; }
+  .guided-screen{ position:fixed; top:0; left:0; right:0; bottom:0; margin:0 auto; }
+  .g-dev{ position:fixed; left:6px; right:6px; bottom:1px; font-size:9px; text-align:center; color:var(--dim); pointer-events:none; z-index:50; }
   .set-stopwatch-big.timed{ font-size:64px; }
   .set-stopwatch-big.running{ color:var(--accent-text); }
   .ico{ width:18px; height:18px; flex:none; vertical-align:-3px; }
@@ -724,6 +734,7 @@
   }
 
   // ── État persistant : chargement sûr, réparation, mesure du stockage ──────────
+  var APP_VERSION = "2026-10-29.1";
   var stateChars = 0, otherChars = 0, loadNotice = null, repairedCount = 0, idsAssigned = 0;
   var STORAGE_BUDGET_CHARS = 2500000;   // ≈ 5 Mo en UTF-16 : hypothèse prudente (iOS n'indique pas le quota exact)
   var STORAGE_WARN_RATIO = 0.8;         // alerte à partir de 80 % du budget
@@ -985,9 +996,9 @@
     var target;
     var restDefault = (state.settings && state.settings.defaultRestSeconds) || DEFAULT_TARGET.rest;
     if(isCardio(ex)){
-      target = ex.lastTarget ? {duration:ex.lastTarget.duration, speed:ex.lastTarget.speed, distance:ex.lastTarget.distance, rest:ex.lastTarget.rest||restDefault} : {duration:DEFAULT_TARGET_CARDIO.duration, speed:DEFAULT_TARGET_CARDIO.speed, distance:DEFAULT_TARGET_CARDIO.distance, rest:restDefault};
+      target = ex.lastTarget ? {duration:ex.lastTarget.duration, speed:ex.lastTarget.speed, distance:ex.lastTarget.distance, rest:ex.lastTarget.rest||restDefault, restAfter:ex.lastTarget.restAfter} : {duration:DEFAULT_TARGET_CARDIO.duration, speed:DEFAULT_TARGET_CARDIO.speed, distance:DEFAULT_TARGET_CARDIO.distance, rest:restDefault};
     } else {
-      target = ex.lastTarget ? {sets:ex.lastTarget.sets, reps:ex.lastTarget.reps, weight:ex.lastTarget.weight, rest:ex.lastTarget.rest||restDefault} : {sets:DEFAULT_TARGET.sets, reps:DEFAULT_TARGET.reps, weight:DEFAULT_TARGET.weight, rest:restDefault};
+      target = ex.lastTarget ? {sets:ex.lastTarget.sets, reps:ex.lastTarget.reps, weight:ex.lastTarget.weight, rest:ex.lastTarget.rest||restDefault, restAfter:ex.lastTarget.restAfter} : {sets:DEFAULT_TARGET.sets, reps:DEFAULT_TARGET.reps, weight:DEFAULT_TARGET.weight, rest:restDefault};
     }
     if(isBodyweight(ex) && !ex.lastTarget) target.weight = 0;
     return {id:uid(), exerciseId:exId, target:target, note:"", sets:[]};
@@ -1083,11 +1094,43 @@
   }
   // Sortie du bloc d'échauffement : on oublie ses brouillons (un même exercice peut aussi être dans la séance).
   function leaveWarmBlock(session){ clearWarmDrafts(session); seedGuidedDrafts(session); }
+  // Échauffements « Poids + répétitions » réglés sur 0 kg et au plus 1 rep (valeurs par défaut d'un ancien import) → « Simple fait ».
+  function convertTrivialWarmups(){
+    var list = [];
+    function consider(en){
+      var ex = getExercise(en.exerciseId);
+      if(!ex || isCardio(ex)) return;
+      var t = en.target || {};
+      if(entryMode(en)==="load" && !(t.weight>0) && !(t.reps>1)) list.push(en);
+    }
+    state.warmups.forEach(function(w){ w.entries.forEach(consider); });
+    state.days.forEach(function(d){ d.sessions.forEach(function(s){ s.entries.forEach(function(en){ if(isWarmEntry(en)) consider(en); }); }); });
+    if(!list.length){ showToast("Aucun échauffement à simplifier", true); return; }
+    if(!window.confirm("Passer "+list.length+" échauffement"+(list.length>1?"s":"")+" (0 kg, 1 répétition) en « Simple fait » ? Les séries et le repos sont conservés.")) return;
+    list.forEach(function(en){ en.target = en.target || {}; en.target.mode = "done"; });
+    save(); render();
+    showToast(list.length+" échauffement"+(list.length>1?"s":"")+" simplifié"+(list.length>1?"s":""));
+  }
+  // Mode dev : relevé des mesures sur l'écran de séance (pour diagnostiquer l'espace vide en bas).
+  function updateGuidedDev(){
+    var scr = document.querySelector(".guided-screen");
+    if(!scr || !ui.guided || !state.settings.devMode) return;
+    var el = document.getElementById("gDev");
+    if(!el){ el = document.createElement("div"); el.id = "gDev"; el.className = "g-dev"; scr.appendChild(el); }
+    var probe = document.createElement("div");
+    probe.style.cssText = "position:fixed;left:0;bottom:0;width:1px;height:env(safe-area-inset-bottom,0px);visibility:hidden";
+    document.body.appendChild(probe);
+    var sb = probe.getBoundingClientRect().height;
+    document.body.removeChild(probe);
+    var r = scr.getBoundingClientRect(), row = scr.querySelector(".guided-btn-row"), b = row ? row.getBoundingClientRect() : null;
+    el.textContent = "iH "+Math.round(window.innerHeight)+" · vv "+Math.round(window.visualViewport ? window.visualViewport.height : 0)+
+      " · écran "+Math.round(screen.height)+" · sécu bas "+Math.round(sb)+" · séance.bas "+Math.round(r.bottom)+" · boutons.bas "+(b ? Math.round(b.bottom) : "?");
+  }
   function clearWarmDrafts(session){
     if(!session) return;
     session.entries.forEach(function(e){ if(isWarmEntry(e)) delete ui.draft[e.exerciseId]; });
   }
-  var WARM_TARGET = {sets:2, reps:15, weight:0, rest:30};
+  var WARM_TARGET = {sets:1, reps:1, weight:0, rest:30, mode:"done"};
   function createSessionInDay(dayId, name){
     var day = getDay(dayId);
     var s = {id:uid(), name:name||"", entries:[]};
@@ -1191,11 +1234,11 @@
     if(isCardio(ex)){
       if(!e.target) e.target = {duration:DEFAULT_TARGET_CARDIO.duration, speed:DEFAULT_TARGET_CARDIO.speed, distance:DEFAULT_TARGET_CARDIO.distance, rest:restDefault};
       if(e.target.rest===undefined) e.target.rest = restDefault;
-      e.target[prop] = value;
+      setProp(e.target, prop, value);
     } else {
       if(!e.target) e.target = {sets:DEFAULT_TARGET.sets, reps:DEFAULT_TARGET.reps, weight:DEFAULT_TARGET.weight, rest:restDefault};
       if(e.target.rest===undefined) e.target.rest = restDefault;
-      e.target[prop] = value;
+      setProp(e.target, prop, value);
     }
     if(prop==="mode" && value==="timed" && !e.target.seconds) e.target.seconds = 30;
     save(); render();
@@ -1218,6 +1261,12 @@
     if(!ui.guided) return null;
     var loc = findSession(ui.guided.sessionId);
     return loc ? loc.session : null;
+  }
+  // Couleur à afficher : pendant un repos, celle de l'exercice qui vient de se terminer.
+  function gWarmView(){
+    if(!ui.guided) return false;
+    if(ui.guided.phase==="rest" && ui.guided.restFromWarm!==undefined) return !!ui.guided.restFromWarm;
+    return gW();
   }
   // Vrai si l'exercice EN COURS du mode guidé est un exercice d'échauffement.
   function gW(){
@@ -1324,7 +1373,7 @@
       // Cible d'échauffement : on n'alimente PAS lastTarget (mémoire des objectifs « normaux »).
       if(!e.target) e.target = isCardio(ex) ? {duration:5, speed:5, distance:0.5, rest:30} : JSON.parse(JSON.stringify(WARM_TARGET));
       if(e.target.rest===undefined) e.target.rest = 30;
-      e.target[prop] = value;
+      setProp(e.target, prop, value);
       if(prop==="mode" && value==="timed" && !e.target.seconds) e.target.seconds = 30;
       save(); render();
       return;
@@ -1332,13 +1381,13 @@
     if(isCardio(ex)){
       if(!e.target) e.target = {duration:DEFAULT_TARGET_CARDIO.duration, speed:DEFAULT_TARGET_CARDIO.speed, distance:DEFAULT_TARGET_CARDIO.distance, rest:DEFAULT_TARGET_CARDIO.rest};
       if(e.target.rest===undefined) e.target.rest = DEFAULT_TARGET_CARDIO.rest;
-      e.target[prop] = value;
-      ex.lastTarget = {duration:e.target.duration, speed:e.target.speed, distance:e.target.distance, rest:e.target.rest};
+      setProp(e.target, prop, value);
+      ex.lastTarget = {duration:e.target.duration, speed:e.target.speed, distance:e.target.distance, rest:e.target.rest, restAfter:e.target.restAfter};
     } else {
       if(!e.target) e.target = {sets:DEFAULT_TARGET.sets, reps:DEFAULT_TARGET.reps, weight:DEFAULT_TARGET.weight, rest:(state.settings.defaultRestSeconds||DEFAULT_TARGET.rest)};
       if(e.target.rest===undefined) e.target.rest = (state.settings.defaultRestSeconds||DEFAULT_TARGET.rest);
-      e.target[prop] = value;
-      ex.lastTarget = {sets:e.target.sets, reps:e.target.reps, weight:e.target.weight, rest:e.target.rest};
+      setProp(e.target, prop, value);
+      ex.lastTarget = {sets:e.target.sets, reps:e.target.reps, weight:e.target.weight, rest:e.target.rest, restAfter:e.target.restAfter};
     }
     save(); render();
   }
@@ -1417,7 +1466,9 @@
           ? {duration:t.duration!==undefined?t.duration:DEFAULT_TARGET_CARDIO.duration, speed:t.speed!==undefined?t.speed:DEFAULT_TARGET_CARDIO.speed, distance:t.distance!==undefined?t.distance:DEFAULT_TARGET_CARDIO.distance, rest:t.rest!==undefined?t.rest:restDefault}
           : {sets:t.sets!==undefined?t.sets:1, reps:t.reps!==undefined?t.reps:1, weight:t.weight!==undefined?t.weight:0, rest:t.rest!==undefined?t.rest:restDefault};
         if(t.mode) target.mode = t.mode;
+        else if(!isCardio(ex) && t.reps===undefined && t.weight===undefined) target.mode = "done";   // mobilité sans reps ni charge : simple « fait »
         if(t.seconds!==undefined) target.seconds = t.seconds;
+        if(t.restAfter!==undefined) target.restAfter = t.restAfter;
         entries.push({exerciseId:ex.id, target:target, note:"", sets:[], supersetId:null});
       });
       var existing = state.warmups.find(function(w){ return w.name.trim().toLowerCase()===item.name.trim().toLowerCase(); });
@@ -1640,9 +1691,23 @@
     ui.guided.phase = "done";
     render();
   }
-  function guidedGoRest(target){
+  // Repos : `rest` = entre les séries d'un exercice ; `restAfter` = avant l'exercice SUIVANT, donné par
+  // l'exercice qui vient de se terminer (à défaut : même valeur que `rest`). 0 = pas de repos.
+  function restBetweenSeconds(target){ return (target && target.rest) || 90; }
+  function restAfterSeconds(target){
+    var t = target || {};
+    return (t.restAfter!==undefined && t.restAfter!==null) ? t.restAfter : restBetweenSeconds(t);
+  }
+  function setProp(o, prop, value){ if(value===undefined) delete o[prop]; else o[prop] = value; }
+  function guidedGoRest(restSec){
     clearInterval(setStopwatchTimer); setStopwatchTimer = null;
-    var restSec = (target && target.rest) || 90;
+    if(!(restSec>0)){                 // repos à 0 : on enchaîne directement
+      ui.guided.phase = "log";
+      ui.guided.setStartedAt = Date.now();
+      render();
+      startSetStopwatch();
+      return;
+    }
     ui.guided.phase = "rest";
     ui.guided.restEndsAt = Date.now() + restSec*1000;
     render();
@@ -1691,23 +1756,19 @@
       finishGuidedRun();
       return;
     }
+    var restSec;
     if(isLastSetOfExercise){
       ui.guided.entryIndex++;
       ui.guided.setNumber = 1;
-      // Fin du bloc d'échauffement : on enchaîne directement sur le 1er exercice, sans repos.
+      restSec = restAfterSeconds(target);         // repos donné par l'exercice qui vient de se terminer
       var nextAfter = session.entries[ui.guided.entryIndex];
-      if(isWarmEntry(entry) && nextAfter && !isWarmEntry(nextAfter)){
-        leaveWarmBlock(session);
-        ui.guided.phase = "log";
-        ui.guided.setStartedAt = Date.now();
-        render();
-        startSetStopwatch();
-        return;
-      }
+      if(isWarmEntry(entry) && nextAfter && !isWarmEntry(nextAfter)) leaveWarmBlock(session);   // fin du bloc d'échauffement
     } else {
       ui.guided.setNumber++;
+      restSec = restBetweenSeconds(target);
     }
-    guidedGoRest(target);
+    ui.guided.restFromWarm = isWarmEntry(entry);   // l'écran de repos garde la couleur de l'exercice qui vient de finir
+    guidedGoRest(restSec);
   }
   function guidedSkipRest(){
     if(!ui.guided || ui.guided.phase!=="rest") return;
@@ -1940,11 +2001,12 @@
         '<input class="obj-input" type="number" inputmode="decimal" min="0" data-role="target-distance" data-session="'+session.id+'" data-ex="'+ek+'" value="'+target.distance+'" aria-label="Objectif de distance en km"> km</div>';
     } else {
       html += '<div class="objectif-row"><span class="obj-label">Objectif</span>'+
-        '<input class="obj-input" type="number" inputmode="numeric" min="0" data-role="target-sets" data-session="'+session.id+'" data-ex="'+ek+'" value="'+target.sets+'" aria-label="Objectif de nombre de séries"> séries ×'+
-        '<input class="obj-input" type="number" inputmode="numeric" min="0" data-role="target-reps" data-session="'+session.id+'" data-ex="'+ek+'" value="'+target.reps+'" aria-label="Objectif de nombre de répétitions"> reps ×'+
+        '<input class="obj-input" type="number" inputmode="numeric" min="0" data-role="target-sets" data-session="'+session.id+'" data-ex="'+ek+'" value="'+target.sets+'" aria-label="Objectif de nombre de séries">'+(target.sets>1?' séries':' série')+' ×'+
+        '<input class="obj-input" type="number" inputmode="numeric" min="0" data-role="target-reps" data-session="'+session.id+'" data-ex="'+ek+'" value="'+target.reps+'" aria-label="Objectif de nombre de répétitions">'+(target.reps>1?' reps':' rep')+' ×'+
         '<input class="obj-input" type="number" inputmode="decimal" min="0" data-role="target-weight" data-session="'+session.id+'" data-ex="'+ek+'" value="'+target.weight+'" aria-label="Objectif de poids en kg"> '+(isBodyweight(ex)?'kg de lest':'kg')+'</div>';
     }
     html += '<div class="rest-line">⏱ repos <input class="rest-input-plain" type="number" inputmode="numeric" min="0" step="5" data-role="target-rest" data-session="'+session.id+'" data-ex="'+ek+'" value="'+(target.rest||90)+'" aria-label="Temps de repos en secondes"> sec entre les séries</div>';
+    html += '<div class="rest-line">⏱ puis <input class="rest-input-plain" type="number" inputmode="numeric" min="0" step="5" data-role="target-restAfter" data-session="'+session.id+'" data-ex="'+ek+'" value="'+(target.restAfter!==undefined?target.restAfter:'')+'" placeholder="'+(target.rest||90)+'" aria-label="Temps de repos avant l’exercice suivant, en secondes"> sec avant l’exercice suivant</div>';
 
     var stampTxt = sets.length ? setsStamp(sets) : "";
     if(stampTxt) html += '<div class="chips-stamp">'+stampTxt+'</div>';
@@ -2187,14 +2249,31 @@
   }
 
   // Carte d'un exercice d'ÉCHAUFFEMENT dans la séance (verte) : réglages du bloc, bouton bascule dans le menu ⋮.
+  // Résumé court d'un échauffement : « 2 × 15 reps · repos 30 s ».
+  function warmSummary(e, ex){
+    var t = e.target || {}, mode = entryMode(e), rest = (t.rest!==undefined ? t.rest : 30), s;
+    if(isCardio(ex)){
+      s = (t.duration!==undefined?t.duration:5)+' min · '+(t.speed!==undefined?t.speed:5)+' km/h';
+    } else {
+      var n = t.sets!==undefined ? t.sets : 1, r = t.reps!==undefined ? t.reps : 15;
+      if(mode==='timed') s = n+' × '+(t.seconds!==undefined?t.seconds:30)+' s';
+      else if(mode==='done') s = n+' série'+(n>1?'s':'');
+      else if(mode==='reps') s = n+' × '+r+' rep'+(r>1?'s':'');
+      else s = n+' × '+r+' rep'+(r>1?'s':'')+((t.weight||0)>0 ? ' × '+t.weight+' kg' : '');
+    }
+    return s+(rest>0 ? ' · repos '+rest+' s' : '');
+  }
+  // Carte d'un exercice d'ÉCHAUFFEMENT dans la séance (verte, compacte : un tap pour régler).
   function renderWarmCard(session, e, ex){
     var exId = e.exerciseId, ek = e.id || exId, sid = session.id, cardio = isCardio(ex), t = e.target || {}, mode = entryMode(e);
     var idx = session.entries.indexOf(e), nW = warmCount(session);
-    var menuOpen = ui.openMenu === ek;
+    var menuOpen = ui.openMenu === ek, open = ui.openExercise === ek;
     var base = ' data-session="'+sid+'" data-ex="'+ek+'"';
-    var h = '<div class="card exercise-card warm">';
-    h += '<div class="ex-head"><span class="ex-title"><span class="warm-tag" aria-hidden="true">🔥</span>'+esc(ex.name)+dupTag(session, e)+'</span>'+
-      '<span class="ex-head-right"><button class="menu-btn'+(menuOpen?' active':'')+'" data-action="togglemenu" data-ex="'+ek+'" aria-label="Options de l’exercice">⋮</button></span></div>';
+    var h = '<div class="card exercise-card warm'+(open?' open':'')+'">';
+    h += '<div class="ex-head" data-action="toggle" data-ex="'+ek+'"><span class="ex-title"><span class="warm-tag" aria-hidden="true">🔥</span>'+esc(ex.name)+dupTag(session, e)+
+      '<span class="warm-sum">'+esc(warmSummary(e, ex))+'</span></span>'+
+      '<span class="ex-head-right"><button class="menu-btn'+(menuOpen?' active':'')+'" data-action="togglemenu" data-ex="'+ek+'" aria-label="Options de l’exercice">⋮</button>'+
+      '<span class="chevron" aria-hidden="true">'+ICON.chevron+'</span></span></div>';
     if(menuOpen){
       h += '<div class="card-menu">'+
         (idx>0 ? '<button data-action="moveex"'+base+' data-dir="-1">↑ Monter</button>' : '')+
@@ -2204,31 +2283,33 @@
         '<button class="danger" data-action="removeex"'+base+'>'+ICON.trash+' Retirer de la séance</button>'+
         '</div>';
     }
-    h += '<div class="warm-label">Échauffement</div>';
-    if(cardio){
-      h += '<div class="objectif-row"><span class="obj-label">Objectif</span>'+
-        '<input class="obj-input" type="number" inputmode="decimal" min="0" data-role="target-duration"'+base+' value="'+(t.duration!==undefined?t.duration:5)+'" aria-label="Durée en minutes"> min ×'+
-        '<input class="obj-input" type="number" inputmode="decimal" min="0" data-role="target-speed"'+base+' value="'+(t.speed!==undefined?t.speed:5)+'" aria-label="Vitesse en km/h"> km/h</div>';
-    } else {
-      h += '<div class="rest-line">Type : <select data-role="warmsessionmode"'+base+'>'+
-        [['load','Poids + répétitions'],['reps','Répétitions seules'],['timed','Durée (compte à rebours)'],['done','Simple « fait »']].map(function(o){
-          return '<option value="'+o[0]+'"'+(mode===o[0]?' selected':'')+'>'+o[1]+'</option>';
-        }).join('')+'</select></div>';
-      var setsIn = '<input class="obj-input" type="number" inputmode="numeric" min="0" data-role="target-sets"'+base+' value="'+(t.sets!==undefined?t.sets:2)+'" aria-label="Nombre de séries"> séries';
-      if(mode==='timed'){
-        h += '<div class="objectif-row">'+setsIn+' × <input class="obj-input" type="number" inputmode="numeric" min="0" data-role="target-seconds"'+base+' value="'+(t.seconds!==undefined?t.seconds:30)+'" aria-label="Durée en secondes"> sec</div>';
-      } else if(mode==='done'){
-        h += '<div class="objectif-row">'+setsIn+'</div>';
+    if(open){
+      if(cardio){
+        h += '<div class="objectif-row"><span class="obj-label">Objectif</span>'+
+          '<input class="obj-input" type="number" inputmode="decimal" min="0" data-role="target-duration"'+base+' value="'+(t.duration!==undefined?t.duration:5)+'" aria-label="Durée en minutes"> min ×'+
+          '<input class="obj-input" type="number" inputmode="decimal" min="0" data-role="target-speed"'+base+' value="'+(t.speed!==undefined?t.speed:5)+'" aria-label="Vitesse en km/h"> km/h</div>';
       } else {
-        h += '<div class="objectif-row">'+setsIn+' × <input class="obj-input" type="number" inputmode="numeric" min="0" data-role="target-reps"'+base+' value="'+(t.reps!==undefined?t.reps:15)+'" aria-label="Nombre de répétitions"> reps</div>';
+        h += '<div class="rest-line">Type : <select data-role="warmsessionmode"'+base+'>'+
+          [['load','Poids + répétitions'],['reps','Répétitions seules'],['timed','Durée (compte à rebours)'],['done','Simple « fait »']].map(function(o){
+            return '<option value="'+o[0]+'"'+(mode===o[0]?' selected':'')+'>'+o[1]+'</option>';
+          }).join('')+'</select></div>';
+        var nS = t.sets!==undefined ? t.sets : 1, nR = t.reps!==undefined ? t.reps : 15;
+        var setsIn = '<input class="obj-input" type="number" inputmode="numeric" min="0" data-role="target-sets"'+base+' value="'+nS+'" aria-label="Nombre de séries">'+(nS>1?' séries':' série');
+        if(mode==='timed'){
+          h += '<div class="objectif-row">'+setsIn+' × <input class="obj-input" type="number" inputmode="numeric" min="0" data-role="target-seconds"'+base+' value="'+(t.seconds!==undefined?t.seconds:30)+'" aria-label="Durée en secondes"> sec</div>';
+        } else if(mode==='done'){
+          h += '<div class="objectif-row">'+setsIn+'</div>';
+        } else {
+          h += '<div class="objectif-row">'+setsIn+' × <input class="obj-input" type="number" inputmode="numeric" min="0" data-role="target-reps"'+base+' value="'+nR+'" aria-label="Nombre de répétitions">'+(nR>1?' reps':' rep')+'</div>';
+        }
       }
+      var restV = t.rest!==undefined ? t.rest : 30;
+      h += '<div class="rest-line">⏱ repos <input class="rest-input-plain" type="number" inputmode="numeric" min="0" step="5" data-role="target-rest"'+base+' value="'+restV+'" aria-label="Temps de repos en secondes"> sec entre les séries</div>';
+      h += '<div class="rest-line">⏱ puis <input class="rest-input-plain" type="number" inputmode="numeric" min="0" step="5" data-role="target-restAfter"'+base+' value="'+(t.restAfter!==undefined?t.restAfter:'')+'" placeholder="'+restV+'" aria-label="Temps de repos avant l’exercice suivant, en secondes"> sec avant l’exercice suivant</div>';
     }
-    h += '<div class="rest-line">⏱ repos <input class="rest-input-plain" type="number" inputmode="numeric" min="0" step="5" data-role="target-rest"'+base+' value="'+(t.rest!==undefined?t.rest:30)+'" aria-label="Temps de repos en secondes"> s</div>';
     h += '</div>';
     return h;
   }
-
-  // `warm` : true = seulement l'échauffement, false = seulement la séance, absent = tout.
   function sessionTotalSets(session, warm){
     var total = 0;
     session.entries.forEach(function(e){
@@ -2241,7 +2322,7 @@
   }
   // Deux jauges distinctes : celle de l'échauffement (verte) tant qu'on est dans le bloc, puis celle de la séance.
   function guidedProgressBarHTML(session){
-    var warm = gW();
+    var warm = gWarmView();
     var totalPlanned = sessionTotalSets(session, warm);
     var logged = warm ? ui.guided.warmLogged : ui.guided.setsLogged;
     var skipped = (warm ? ui.guided.warmSkipped : ui.guided.setsSkipped) || 0;
@@ -2284,7 +2365,7 @@
     runClockTimer = setInterval(tickRunClock, 1000);
   }
   function guidedTopHTML(session){
-    var warmTop = gW();
+    var warmTop = gWarmView();
     return '<div class="g-top'+(warmTop?' warm':'')+'">'+
       '<div class="g-toprow"><span class="g-live"><i></i>'+(warmTop ? '🔥 Échauffement' : 'Séance en cours')+'</span>'+
       '<span class="g-clock" aria-label="Temps total de la séance">Total <b id="runClock">'+formatClock(runElapsed())+'</b></span></div>'+
@@ -2362,10 +2443,10 @@
         nextTitle = nextEx ? esc(nextEx.name)+dupTag(session, nextEntry) : 'Fin de séance';
         nextSub = (nextEx && nextEntry) ? targetSummary(nextEx, nextEntry.target||{}) : '';
       }
-      return '<div class="guided-screen'+(warm?' warm':'')+'">'+
+      return '<div class="guided-screen'+(ui.guided.restFromWarm?' warm':'')+'">'+
         guidedTopHTML(session)+
         '<div class="g-mid rest">'+
-          '<div class="rest-label">Repos</div>'+
+          '<div class="rest-label">'+(ui.guided.setNumber===1 ? 'Repos avant l’exercice suivant' : 'Repos')+'</div>'+
           '<div class="rest-countdown" id="restCountdown">'+formatTime(remaining)+'</div>'+
           '<div class="g-after">'+
             '<div class="g-next"><span class="n1">Ensuite</span><span class="n2">'+nextTitle+'</span>'+(nextSub?'<span class="n3">'+nextSub+'</span>':'')+'</div>'+
@@ -2453,7 +2534,9 @@
     } else {
       mainBtn = '<button class="validate-btn" data-action="guidedvalidate">Valider la série</button>';
     }
-    html += '<div class="g-bottom">'+noteHTML+mainBtn+undoBtn+
+    // Zone principale (Valider) nettement séparée du groupe « Annuler / Quitter / Passer » : pas de faux appuis.
+    html += '<div class="g-act">'+noteHTML+mainBtn+'</div>';
+    html += '<div class="g-bottom g-secondary">'+undoBtn+
       '<div class="guided-btn-row">'+
       '<button class="guided-btn guided-btn-quit" data-action="guidedquitrequest">Quitter</button>'+
       '<button class="guided-btn guided-btn-skip" data-action="guidedskipexercise">Passer cet exercice</button>'+
@@ -2485,12 +2568,12 @@
       if(!byCat[ex.cat]){ byCat[ex.cat]=[]; order.push(ex.cat); }
       byCat[ex.cat].push(ex);
     });
-    var html = "";
+    var html = '<div class="ex-sticky">';
     if(ui.exercisePickerFor && ui.exercisePickerFor.type==="warmup"){
       var pickerWarmup = findWarmup(ui.exercisePickerFor.id);
       html += '<div class="picker-banner">Ajout à l\'échauffement « '+esc(pickerWarmup?pickerWarmup.name:"")+' » <a data-action="backtowarmupedit" data-warmup="'+ui.exercisePickerFor.id+'">← Retour</a></div>';
     }
-    html += '<div class="search-wrap"><input id="exSearch" type="text" inputmode="search" autocomplete="off" placeholder="Rechercher un exercice…" value="'+esc(ui.exerciseQuery||'')+'"></div>';
+    html += '<div class="search-wrap"><input id="exSearch" type="text" inputmode="search" autocomplete="off" placeholder="Rechercher un exercice…" value="'+esc(ui.exerciseQuery||'')+'"></div></div>';
     if(order.length===0){
       html += '<div class="empty">Aucun exercice ne correspond à « '+esc(ui.exerciseQuery||'')+' ».</div>';
     }
@@ -2850,6 +2933,7 @@
     html += '</div>';
     html += '<div class="hist-sub">Ce modèle est ajouté automatiquement au début de chaque nouvelle séance du jour.</div>';
     html += '<button class="backup-btn" style="width:100%; margin-bottom:10px;" data-action="applywarmdefaults">🔥 L’ajouter aux séances existantes</button>';
+    html += '<button class="backup-btn" style="width:100%; margin-bottom:10px;" data-action="convertwarmdone">🔥 Simplifier les échauffements « 0 kg × 1 rep »</button>';
     html += '<button class="backup-btn" style="width:100%; margin-bottom:20px;" data-action="gotowarmupedit">🔥 Gérer les modèles d\'échauffement</button>';
 
     html += '<div class="section-title">Séance</div><div class="card settings-card">';
@@ -2879,6 +2963,7 @@
     var si2 = storageInfo();
     html += '<div class="hist-sub">Stockage : '+fmtBytes(si2.used)+' utilisés sur ≈ 5 Mo ('+Math.round(si2.ratio*100)+' %). Estimation prudente (iOS n’indique pas le quota exact) ; alerte à 80 %.</div>';
     html += '<div class="hist-sub">Mode hors ligne : <b id="offlineStatus">'+esc(offlineStatus)+'</b></div>';
+    html += '<div class="hist-sub">Version de l’app : <b>'+APP_VERSION+'</b></div>';
     if(hasCorruptCopy()){
       html += '<button class="backup-btn" style="width:100%; margin:6px 0 20px;" data-action="exportcorrupt">⚠️ Exporter la copie des données illisibles</button>';
     }
@@ -2947,6 +3032,7 @@
           }
         }
         html2 += '<div class="rest-line">Repos : <input class="obj-input" type="text" inputmode="numeric" data-role="warmuptarget-rest" data-warmup="'+w.id+'" data-ex="'+ex.id+'" value="'+(t.rest!==undefined?t.rest:30)+'"> sec</div>';
+        html2 += '<div class="rest-line">Repos avant l’exercice suivant : <input class="obj-input" type="text" inputmode="numeric" data-role="warmuptarget-restAfter" data-warmup="'+w.id+'" data-ex="'+ex.id+'" value="'+(t.restAfter!==undefined?t.restAfter:'')+'" placeholder="'+(t.rest!==undefined?t.rest:30)+'"> sec</div>';
         html2 += '</div>';
       });
       html2 += '<button class="cta-btn" data-action="goto-exercices-for-warmup" data-warmup="'+w.id+'">+ Ajouter un exercice</button>';
@@ -2977,6 +3063,7 @@
     var appEl = document.getElementById("app");
     if(appEl) appEl.classList.toggle("app-guided", !!ui.guided);
     document.documentElement.classList.toggle("guided-lock", !!ui.guided);
+    if(ui.guided && state.settings.devMode) setTimeout(updateGuidedDev, 80);
     var main = document.querySelector("main");
     var scrollPos = main ? main.scrollTop : 0;
     var view = document.getElementById("view");
@@ -3124,6 +3211,8 @@
     } else if(action==="togglewarm"){
       ui.openMenu = null;
       toggleWarmup(t.dataset.session, t.dataset.ex);
+    } else if(action==="convertwarmdone"){
+      convertTrivialWarmups();
     } else if(action==="applywarmdefaults"){
       applyWarmDefaultsToSessions();
     } else if(action==="opensettings"){
@@ -3336,11 +3425,13 @@
       var prop = t.dataset.role.replace("target-","");
       var v2 = parseFloat(t.value);
       if(isNaN(v2) || v2<0) v2 = 0;
+      if(prop==="restAfter" && t.value.trim()==="") v2 = undefined;   // champ vidé = comme le repos entre séries
       setTarget(t.dataset.session, t.dataset.ex, prop, v2);
     } else if(t.dataset.role && t.dataset.role.indexOf("warmuptarget-")===0){
       var wprop = t.dataset.role.replace("warmuptarget-","");
       var wv = parseFloat(t.value);
       if(isNaN(wv) || wv<0) wv = 0;
+      if(wprop==="restAfter" && t.value.trim()==="") wv = undefined;
       setWarmupTarget(t.dataset.warmup, t.dataset.ex, wprop, wv);
     } else if(t.dataset.role==="weeklygoal"){
       var gv = parseInt(t.value, 10);
