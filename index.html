@@ -86,7 +86,7 @@
   .theme-toggle svg{ width:19px; height:19px; }
   .theme-toggle:active{ background:var(--accent-dim); color:var(--accent); }
 
-  main{ flex:1; overflow-y:auto; padding: 16px 16px calc(96px + var(--safe-b)); }
+  main{ flex:1; overflow-y:visible; overflow-x:clip; padding: 16px 16px calc(96px + var(--safe-b)); }
 
   @keyframes viewFadeIn{ from{ opacity:0; transform:translateY(6px); } to{ opacity:1; transform:translateY(0); } }
   #view.fade-in{ animation: viewFadeIn .22s cubic-bezier(.22,.61,.36,1); }
@@ -452,7 +452,8 @@
   .undo-toast button{ border:none; border-radius:999px; background:var(--accent); color:#fff; font-weight:800; font-size:14px; min-height:40px; padding:0 18px; }
 
   /* --- mode séance : plein écran, sans barres, sans scroll --- */
-  html.guided-lock, html.guided-lock body{ overflow:hidden; height:100%; overscroll-behavior:none; }
+  html.guided-lock, html.guided-lock body{ height:100%; overscroll-behavior:none; }
+  html.guided-lock body{ min-height:calc(100% + 2px); }
   #app.app-guided{ height:100vh; height:100dvh; min-height:0; overflow:hidden; }
   #app.app-guided .topbar, #app.app-guided .tabbar{ display:none; }
   #app.app-guided main{ padding:0; overflow:hidden; display:flex; flex-direction:column; min-height:0; }
@@ -542,7 +543,7 @@
   .g-undo.ghost{ visibility:hidden; pointer-events:none; }
   .warm-sum{ display:block; margin-top:2px; font-size:12px; font-weight:600; color:var(--dim); }
   .card-menu{ margin-bottom:12px; }
-  .ex-sticky{ position:sticky; top:0; z-index:6; margin:-16px -16px 8px; padding:12px 16px 8px; background:var(--bg); }
+  .ex-sticky{ position:sticky; top:var(--topbar-h, 0px); z-index:6; margin:-16px -16px 8px; padding:12px 16px 8px; background:var(--bg); }
   .ex-sticky .search-wrap{ margin-bottom:0; }
   .ex-sticky .picker-banner{ margin-bottom:8px; }
   .g-act{ flex:none; display:flex; flex-direction:column; gap:10px; width:100%; }
@@ -734,7 +735,7 @@
   }
 
   // ── État persistant : chargement sûr, réparation, mesure du stockage ──────────
-  var APP_VERSION = "2026-10-29.1";
+  var APP_VERSION = "2026-10-30.1";
   var stateChars = 0, otherChars = 0, loadNotice = null, repairedCount = 0, idsAssigned = 0;
   var STORAGE_BUDGET_CHARS = 2500000;   // ≈ 5 Mo en UTF-16 : hypothèse prudente (iOS n'indique pas le quota exact)
   var STORAGE_WARN_RATIO = 0.8;         // alerte à partir de 80 % du budget
@@ -1111,20 +1112,24 @@
     save(); render();
     showToast(list.length+" échauffement"+(list.length>1?"s":"")+" simplifié"+(list.length>1?"s":""));
   }
-  // Mode dev : relevé des mesures sur l'écran de séance (pour diagnostiquer l'espace vide en bas).
-  function updateGuidedDev(){
+  // Mode dev : relevé des mesures sur l'écran de séance (diagnostic de l'espace vide en bas).
+  // « iH a→b » : hauteur de fenêtre au rendu puis 1,5 s plus tard ; doc = hauteur du document ; y = défilement.
+  function updateGuidedDev(late){
     var scr = document.querySelector(".guided-screen");
     if(!scr || !ui.guided || !state.settings.devMode) return;
     var el = document.getElementById("gDev");
     if(!el){ el = document.createElement("div"); el.id = "gDev"; el.className = "g-dev"; scr.appendChild(el); }
+    if(late!==true) ui.devIH0 = Math.round(window.innerHeight);
     var probe = document.createElement("div");
     probe.style.cssText = "position:fixed;left:0;bottom:0;width:1px;height:env(safe-area-inset-bottom,0px);visibility:hidden";
     document.body.appendChild(probe);
     var sb = probe.getBoundingClientRect().height;
     document.body.removeChild(probe);
     var r = scr.getBoundingClientRect(), row = scr.querySelector(".guided-btn-row"), b = row ? row.getBoundingClientRect() : null;
-    el.textContent = "iH "+Math.round(window.innerHeight)+" · vv "+Math.round(window.visualViewport ? window.visualViewport.height : 0)+
-      " · écran "+Math.round(screen.height)+" · sécu bas "+Math.round(sb)+" · séance.bas "+Math.round(r.bottom)+" · boutons.bas "+(b ? Math.round(b.bottom) : "?");
+    var de = document.documentElement;
+    el.textContent = "iH "+ui.devIH0+(late===true ? "→"+Math.round(window.innerHeight) : "")+" · vv "+Math.round(window.visualViewport ? window.visualViewport.height : 0)+
+      " · écran "+Math.round(screen.height)+" · sécu "+Math.round(sb)+" · bas "+Math.round(r.bottom)+" · btn "+(b ? Math.round(b.bottom) : "?")+
+      " · doc "+de.scrollHeight+" · y "+Math.round(window.scrollY);
   }
   function clearWarmDrafts(session){
     if(!session) return;
@@ -1931,6 +1936,19 @@
     return order.map(function(k){ return map[k]; });
   }
 
+  // Résumé court d'un exercice : « 4 × 15 reps × 5 kg · repos 90 s · ✓ 2/4 ».
+  function stdSummary(e, ex){
+    var t = e.target || {}, s;
+    if(isCardio(ex)){
+      s = (t.duration||0)+' min · '+(t.speed||0)+' km/h · '+(t.distance||0)+' km';
+    } else {
+      var n = t.sets||0, r = t.reps||0, w = t.weight||0;
+      s = n+' × '+r+' rep'+(r>1?'s':'')+(w>0 ? ' × '+w+(isBodyweight(ex)?' kg de lest':' kg') : '');
+    }
+    s += ' · repos '+(t.rest||90)+' s';
+    if(e.sets && e.sets.length) s += ' · ✓ '+e.sets.length+'/'+(isCardio(ex) ? 1 : (t.sets||0));
+    return s;
+  }
   function renderExerciseCard(session, key){
     var e = entryFor(session, key);
     if(!e) return "";
@@ -1969,7 +1987,7 @@
     var html = '<div class="card exercise-card'+(open?' open':'')+(metGoal?' goal-met':'')+'">';
     html += '<div class="ex-head" data-action="toggle" data-ex="'+ek+'">';
     var menuOpen = ui.openMenu === ek;
-    html += '<span class="ex-title">'+esc(ex.name)+dupTag(session, e)+'</span>'+
+    html += '<span class="ex-title">'+esc(ex.name)+dupTag(session, e)+'<span class="warm-sum std-sum">'+esc(stdSummary(e, ex))+'</span></span>'+
       '<span class="ex-head-right">'+
       '<button class="menu-btn'+(menuOpen?' active':'')+'" data-action="togglemenu" data-ex="'+ek+'" aria-label="Options de l’exercice">⋮</button>'+
       '<span class="chevron" aria-hidden="true">'+ICON.chevron+'</span></span></div>';
@@ -1994,6 +2012,7 @@
       html += '<div class="superset-badge" style="border-color:'+sc+';color:'+sc+'"><span>⚡ Superset</span></div>';
     }
 
+    if(open){
     if(cardio){
       html += '<div class="objectif-row"><span class="obj-label">Objectif</span>'+
         '<input class="obj-input" type="number" inputmode="numeric" min="0" data-role="target-duration" data-session="'+session.id+'" data-ex="'+ek+'" value="'+target.duration+'" aria-label="Objectif de durée en minutes"> min ×'+
@@ -2017,7 +2036,6 @@
 
     html += '<textarea class="note-area" placeholder="Note (ressenti, variante, rappel…)" data-role="note" data-session="'+session.id+'" data-ex="'+ek+'">'+esc(e.note||"")+'</textarea>';
 
-    if(open){
       html += '<div class="log-panel">';
       if(cardio){
         html += '<div class="stepper-row"><span class="stepper-label">Durée (min)</span><div class="stepper">'+
@@ -3063,7 +3081,7 @@
     var appEl = document.getElementById("app");
     if(appEl) appEl.classList.toggle("app-guided", !!ui.guided);
     document.documentElement.classList.toggle("guided-lock", !!ui.guided);
-    if(ui.guided && state.settings.devMode) setTimeout(updateGuidedDev, 80);
+    if(ui.guided && state.settings.devMode){ setTimeout(updateGuidedDev, 80); setTimeout(function(){ updateGuidedDev(true); }, 1500); }
     var main = document.querySelector("main");
     var scrollPos = main ? main.scrollTop : 0;
     var view = document.getElementById("view");
@@ -3084,6 +3102,8 @@
       main.scrollTop = scrollPos;
     }
     autoSizeTextareas();
+    var tbEl = document.querySelector(".topbar");
+    if(tbEl) document.documentElement.style.setProperty("--topbar-h", tbEl.offsetHeight+"px");
     view.classList.remove("fade-in");
     void view.offsetWidth;
     view.classList.add("fade-in");
